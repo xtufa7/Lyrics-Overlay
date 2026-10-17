@@ -17,17 +17,19 @@ export class LocalBridge {
   private active: WebSocket | null = null;
   private failures: number[] = [];
   private heartbeat: ReturnType<typeof setInterval> | null = null;
+  private stopping = false;
+  private stopPromise: Promise<void> | null = null;
   constructor(private dir: string, private callbacks: Callbacks, private port = PORT) {
     this.server = createServer((_req,res)=>{res.writeHead(404);res.end();});
     this.server.on('upgrade',(req,socket,head)=>{
-      if (req.url !== '/v1' || !ORIGINS.has(req.headers.origin ?? '') ||
+      if (this.stopping || req.url !== '/v1' || !ORIGINS.has(req.headers.origin ?? '') ||
           req.headers.host !== `127.0.0.1:${this.port}` || this.wss.clients.size >= 4) {
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); socket.destroy(); return;
       }
       this.wss.handleUpgrade(req,socket,head,ws=>this.wss.emit('connection',ws));
     });
     this.wss.on('connection',ws=>this.connection(ws));
-    this.wss.on('error',()=>this.callbacks.error('The local connection encountered an error.'));
+    this.wss.on('error',()=>{if(!this.stopping)this.callbacks.error('The local connection encountered an error.');});
   }
   async start() {
     this.tokenHash = (await readJson(join(this.dir,'pairing.json'),{tokenHash:''})).tokenHash;
@@ -35,7 +37,7 @@ export class LocalBridge {
       this.server.once('error',reject);
       this.server.listen(this.port,'127.0.0.1',()=>{this.server.removeListener('error',reject);resolve();});
     });
-    this.server.on('error',()=>this.callbacks.error('The local connection stopped. Restart the companion.'));
+    this.server.on('error',()=>{if(!this.stopping)this.callbacks.error('The local connection stopped. Restart the companion.');});
     this.heartbeat = setInterval(()=>{
       for (const client of this.wss.clients) {
         const state = client as WebSocket & {alive?: boolean};
@@ -65,13 +67,13 @@ export class LocalBridge {
     ws.on('pong',()=>{(ws as WebSocket & {alive?:boolean}).alive=true;});
     ws.on('close',()=>{
       clearTimeout(timeout);
-      if (this.active === ws) { this.active=null; this.callbacks.connected(false); }
+      if (this.active === ws) { this.active=null; if(!this.stopping)this.callbacks.connected(false); }
     });
     let queue = Promise.resolve();
     ws.on('message',(buffer,isBinary)=>{
       // Serialize authentication persistence and snapshots; no async interleaving can authenticate twice.
       queue = queue.then(async()=>{
-        if (ws.readyState !== WebSocket.OPEN) return;
+        if (this.stopping || ws.readyState !== WebSocket.OPEN) return;
         if (Date.now()-windowAt>=1000) {count=0;windowAt=Date.now();}
         if (++count>40 || isBinary) {ws.close(4008,'Rate limit');return;}
         let raw: unknown;
@@ -91,6 +93,7 @@ export class LocalBridge {
             token=randomBytes(32).toString('hex');this.tokenHash=hash(token);this.pairing=null;
             await atomicJson(join(this.dir,'pairing.json'),{tokenHash:this.tokenHash});
           }
+          if(this.stopping||ws.readyState!==WebSocket.OPEN)return;
           const previous=this.active;
           this.active=ws;authenticated=true;clearTimeout(timeout);
           if (previous && previous!==ws) previous.close(4000,'Replaced by current Spotify session');
@@ -102,13 +105,18 @@ export class LocalBridge {
           if (msg.seq<=seq) return;
           seq=msg.seq;this.callbacks.playback(msg);
         } else if (msg.type==='command') this.callbacks.command(msg.action);
-      }).catch(()=>{ws.close(1011,'Local storage error');this.callbacks.error('Could not save the local pairing. Check storage permissions.');});
+      }).catch(()=>{if(this.stopping)return;ws.close(1011,'Local storage error');this.callbacks.error('Could not save the local pairing. Check storage permissions.');});
     });
   }
-  async stop() {
+  stop(): Promise<void> {
+    if(this.stopPromise)return this.stopPromise;
+    this.stopping=true;this.active=null;
     if (this.heartbeat) clearInterval(this.heartbeat);
     for (const ws of this.wss.clients) ws.terminate();
-    this.wss.close();
-    await new Promise<void>(resolve=>this.server.close(()=>resolve()));
+    this.stopPromise=Promise.all([
+      new Promise<void>(resolve=>this.wss.close(()=>resolve())),
+      new Promise<void>(resolve=>this.server.close(()=>resolve()))
+    ]).then(()=>{});
+    return this.stopPromise;
   }
 }

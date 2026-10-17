@@ -28,3 +28,16 @@ test('Loopback bridge validates origin/auth, pairs once, rejects stale snapshots
     const removed=await open();const denied=once(removed,'close');removed.send(JSON.stringify({type:'auth',protocol:1,token:response.token}));assert.equal((await denied)[0],4001);
   }finally{await bridge.stop();await rm(dir,{recursive:true,force:true});}
 });
+test('Stopping an authenticated bridge is idempotent and cannot notify disposed UI',async()=>{
+  const dir=await mkdtemp(join(tmpdir(),'lyrics-shutdown-')),events:string[]=[];
+  const bridge=new LocalBridge(dir,{playback:()=>events.push('playback'),connected:v=>events.push(`connected:${v}`),command:()=>events.push('command'),error:()=>events.push('error')},port);
+  try{
+    await bridge.start();
+    const socket=await open();await auth(socket,{code:bridge.createPairing()});
+    assert.deepEqual(events,['connected:true']);events.length=0;
+    const closed=once(socket,'close');
+    const firstStop=bridge.stop();assert.equal(bridge.stop(),firstStop);
+    await Promise.all([firstStop,closed]);
+    assert.deepEqual(events,[]);assert.equal(bridge.listening,false);
+  }finally{await bridge.stop();await rm(dir,{recursive:true,force:true});}
+});

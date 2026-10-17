@@ -5,9 +5,13 @@ on:
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.1.0
@@ -17,8 +21,10 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run test:desktop
+        timeout-minutes: 3
       - run: npm run dist
       - run: npm run test:packaged
+        timeout-minutes: 3
       - uses: actions/upload-artifact@v7.0.2
         with:
           name: Lyrics-Overlay-Windows

@@ -44,11 +44,24 @@ function preferences(role:'overlay'|'settings') {
   return {preload:join(__dirname,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true,webSecurity:true,backgroundThrottling:role!=='overlay',additionalArguments:[`--overlay-role=${role}`]};
 }
 function broadcast() {
-  if (!state) return;
-  for(const win of [overlay,settingsWindow])if(win&&!win.isDestroyed())win.webContents.send('state',state);
+  if (closing || !state) return;
+  for(const win of [overlay,settingsWindow])if(win&&!win.isDestroyed()&&!win.webContents.isDestroyed())win.webContents.send('state',state);
   updateTray();
 }
-function warning(message:string) {if(!state.warnings.includes(message))state.warnings.push(message);broadcast();}
+function warning(message:string) {if(closing)return;if(!state.warnings.includes(message))state.warnings.push(message);broadcast();}
+function shutdown() {
+  if(closing)return;
+  closing=true;requestGeneration++;translationGeneration++;
+  lyricRequest?.abort();translationRequest?.abort();
+  globalShortcut.unregisterAll();
+  if(resizeTimer)clearInterval(resizeTimer);
+  if(geometryTimer)clearTimeout(geometryTimer);
+  // Socket close events can arrive after native tray/window disposal.
+  const currentTray=tray;tray=null;
+  if(currentTray&&!currentTray.isDestroyed())currentTray.destroy();
+  void bridge?.stop().catch(error=>console.error('Local bridge shutdown failed:',error));
+}
+app.on('before-quit',shutdown);
 function displayFor(s:Settings) {return screen.getAllDisplays().find(d=>String(d.id)===s.monitor)??screen.getPrimaryDisplay();}
 function geometry(s:Settings) {
   const area=displayFor(s).workArea;
@@ -73,16 +86,19 @@ async function start() {
   secureWindow(overlay,'overlay');
   overlay.on('close',event=>{if(!closing){event.preventDefault();void patchSettings({visible:false});}});
   overlay.on('moved',()=>saveGeometry());
-  overlay.webContents.on('did-finish-load',()=>{if(state.settings.visible)overlay?.showInactive();broadcast();});
+  overlay.on('closed',()=>{overlay=null;});
+  overlay.webContents.on('did-finish-load',()=>{if(!closing&&state.settings.visible)overlay?.showInactive();broadcast();});
   installIpc();
   const trayImage=nativeImage.createFromPath(join(__dirname,'assets/tray.png'));
   tray=new Tray(trayImage);tray.setToolTip('Spicetify Lyrics Overlay');tray.on('double-click',()=>openSettings());updateTray();
   await registerShortcuts();
-  screen.on('display-removed',()=>{overlay?.setBounds(geometry(state.settings));broadcast();});
-  screen.on('display-metrics-changed',()=>{overlay?.setBounds(geometry(state.settings));broadcast();});
+  const refreshDisplay=()=>{if(closing||!overlay||overlay.isDestroyed())return;overlay.setBounds(geometry(state.settings));broadcast();};
+  screen.on('display-removed',refreshDisplay);
+  screen.on('display-metrics-changed',refreshDisplay);
   bridge=new LocalBridge(dir,{
     playback:receivePlayback,
     connected:connected=>{
+      if(closing)return;
       state.connected=connected;
       if(!connected){lyricRequest?.abort();translationRequest?.abort();translationGeneration++;requestGeneration++;state.playback=null;state.lyrics=null;state.translations=[];state.status='انقطع Spotify';if(state.connectionPhase!=='installing')state.connectionPhase='waiting';state.setupStatus='بانتظار عودة Spotify؛ افتح التطبيق أو اضغط إصلاح الربط';}
       else{state.status='متصل؛ بانتظار بيانات التشغيل';state.connectionPhase='connected';state.setupStatus='تم الربط بنجاح · الاتصال محلي على جهازك';}
@@ -92,14 +108,13 @@ async function start() {
     error:warning
   },smoke?43828:PORT);
   try {await bridge.start();} catch {state.connectionPhase='error';state.setupStatus='المنفذ المحلي 43827 مشغول. أغلق أي نسخة أخرى من التطبيق وأعد تشغيله.';warning(state.setupStatus);}
-  app.on('before-quit',()=>{closing=true;lyricRequest?.abort();translationRequest?.abort();globalShortcut.unregisterAll();if(resizeTimer)clearInterval(resizeTimer);tray?.destroy();void bridge.stop();});
   await overlay.loadFile(page('overlay'));
   if(process.argv.includes('--settings')||!process.argv.includes('--background'))openSettings();
   await atomicJson(join(dir,'onboarded.json'),true);
   if(process.argv.includes('--connect-spotify'))void installExtension().catch(()=>{});
 }
 function updateTray() {
-  if(!tray||!state)return;
+  if(closing||!tray||tray.isDestroyed()||!state)return;
   tray.setContextMenu(Menu.buildFromTemplate([
     {label:state.connected?'Spotify متصل':'بانتظار Spotify',enabled:false},
     {type:'separator'},
@@ -111,16 +126,16 @@ function updateTray() {
   ]));
 }
 function openSettings() {
-  if(!state)return;
+  if(closing||!state)return;
   if(settingsWindow&&!settingsWindow.isDestroyed()){settingsWindow.show();settingsWindow.focus();return;}
   settingsWindow=new BrowserWindow({width:1180,height:860,minWidth:960,minHeight:720,show:false,backgroundColor:'#101014',title:'Lyrics Overlay · 0xTuFa7',titleBarStyle:'hidden',titleBarOverlay:{color:'#101014',symbolColor:'#c9c3d8',height:36},autoHideMenuBar:true,webPreferences:preferences('settings')});
   secureWindow(settingsWindow,'settings');
-  settingsWindow.once('ready-to-show',()=>settingsWindow?.show());
+  settingsWindow.once('ready-to-show',()=>{if(!closing)settingsWindow?.show();});
   settingsWindow.on('closed',()=>{settingsWindow=null;});
   void settingsWindow.loadFile(page('settings'));
 }
 function setEdit(value:boolean) {
-  if(!overlay)return;
+  if(closing||!overlay||overlay.isDestroyed())return;
   state.edit=value;
   overlay.setFocusable(value);overlay.setIgnoreMouseEvents(!value,{forward:true});
   if(value){overlay.showInactive();}else if(!state.settings.visible)overlay.hide();
@@ -128,6 +143,7 @@ function setEdit(value:boolean) {
   broadcast();
 }
 async function registerShortcuts() {
+  if(closing)return;
   globalShortcut.unregisterAll();
   state.warnings=state.warnings.filter(s=>!s.startsWith('Shortcut')&&!s.startsWith('الاختصار'));
   const updates:Partial<Settings>={};
@@ -147,9 +163,11 @@ async function registerShortcuts() {
 }
 function patchSettings(patch:Partial<Settings>):Promise<void> {
   const next=writeQueue.then(async()=>{
+    if(closing)return;
     const previous=state.settings;
     if(patch.monitor!==undefined&&patch.monitor!==previous.monitor&&!('x' in patch)&&!('y' in patch))patch={...patch,x:null,y:null};
     await store.save(patch);state.settings=store.value;
+    if(closing)return;
     const s=state.settings;
     if(['x','y','width','height','monitor'].some(k=>k in patch))overlay?.setBounds(geometry(s));
     if(s.visible||state.edit)overlay?.showInactive();else overlay?.hide();
@@ -174,15 +192,16 @@ function setMaterial(glass:boolean) {
   catch{warning('Native acrylic is unavailable on this Windows configuration. The translucent surface remains enabled.');}
 }
 function saveGeometry() {
-  if(!state.edit||!overlay)return;
+  if(closing||!state.edit||!overlay)return;
   clearTimeout(geometryTimer);
   geometryTimer=setTimeout(()=>{
-    if(!overlay||overlay.isDestroyed())return;
+    if(closing||!overlay||overlay.isDestroyed())return;
     const bounds=overlay.getBounds(),display=screen.getDisplayMatching(bounds);
     void patchSettings({...bounds,monitor:String(display.id)}).catch(()=>warning('Could not save overlay position.'));
   },250);
 }
 function receivePlayback(p:Playback) {
+  if(closing)return;
   const previous=state.playback;
   const changed=!previous||previous.revision!==p.revision||previous.track?.uri!==p.track?.uri;
   state.playback=p;

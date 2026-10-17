@@ -16,11 +16,14 @@ async function main() {
   const lyrics=parseTtml('<tt><body><p begin="0s" end="10s"><span begin="0s" dur="4s">مرحبا</span> <span begin="4s" dur="4s">بالعالم</span></p><p begin="10s" end="20s">The evening finds its rhythm</p><p begin="20s" end="30s">音楽とともに 夜を歩こう</p><p begin="30s" end="40s">هذا المساء feels like home 2026</p></body></tt>',40000);
   await store.import(track,lyrics);
   const env:Record<string,string>={...process.env as Record<string,string>,LYRICS_OVERLAY_TEST:'1',LYRICS_OVERLAY_DATA:dir};delete env.ELECTRON_RUN_AS_NODE;
-  const errors:string[]=[];let app:ElectronApplication|undefined,ws:WebSocket|undefined,checks=0,translationServer:Server|undefined;
+  const errors:string[]=[],mainErrors:string[]=[];let app:ElectronApplication|undefined,ws:WebSocket|undefined,checks=0,translationServer:Server|undefined;
   const check=(condition:unknown,message:string)=>{assert.ok(condition,message);checks++;console.log(`PASS ${message}`);};
   const launch=async()=>{
     const exe=process.env.LYRICS_OVERLAY_EXE;
     const instance=await electron.launch({...exe?{executablePath:resolve(exe),args:['--settings']}:{args:[resolve('.'),'--settings']},env,timeout:40000});
+    instance.process().stderr?.on('data',chunk=>{const message=String(chunk);if(/uncaught|Tray is destroyed|Object has been destroyed|MAIN_ERROR_BOX/i.test(message))mainErrors.push(message);});
+    // Make a main-process exception fail this test instead of hanging behind a native dialog.
+    await instance.evaluate(({dialog})=>{dialog.showErrorBox=(title,content)=>{console.error('MAIN_ERROR_BOX',title,content);process.exitCode=1;};});
     instance.on('window',page=>{page.on('pageerror',e=>errors.push(e.stack??e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});});
     let settings:Page|undefined,overlay:Page|undefined;
     const deadline=Date.now()+20000;
@@ -123,8 +126,13 @@ async function main() {
     await overlay.waitForFunction(()=>document.querySelector('.lyric-text')?.textContent==='مرحبا بالعالم');
     check((await settings.evaluate(()=>window.overlay.getState())).trackOffsetMs===350,'Pairing token and per-track offset survive a restart');
     check((await settings.evaluate(()=>window.overlay.getState())).translations[0]==='Hello world','Previously requested translations restore from cache after restarting');
+    const exit=once(app.process(),'exit');
+    await app.close();app=undefined;
+    const [exitCode]=await exit;
+    check(exitCode===0&&ws.readyState===WebSocket.CLOSED,'Quitting with an authenticated Spotify socket closes the process and connection cleanly');
+    check(mainErrors.length===0,`No main-process exceptions during shutdown: ${mainErrors.join('; ')}`);
     check(errors.length===0,`No renderer errors or CSP failures: ${errors.join('; ')}`);
-    await writeFile(join(dir,'result.json'),JSON.stringify({checks,errors,screenshots:['settings-arabic.png','overlay-arabic.png']},null,2));
+    await writeFile(join(dir,'result.json'),JSON.stringify({checks,errors,mainErrors,screenshots:['settings-arabic.png','overlay-arabic.png']},null,2));
     console.log(`Desktop smoke: ${checks} checks passed. Artifacts: ${dir}`);
   }finally{ws?.terminate();await app?.close();if(translationServer)await new Promise<void>(resolve=>translationServer!.close(()=>resolve()));}
 }
