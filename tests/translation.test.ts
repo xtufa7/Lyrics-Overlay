@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {TranslationEngine,localOllamaUrl,parseTranslations,translationIdentity} from '../src/lyrics/translation';
+import {TranslationEngine,localOllamaUrl,parseTranslations,translationIdentity,targetLanguage} from '../src/lyrics/translation';
+import {visualWords} from '../src/shared/timing';
 import {defaults,type Track} from '../src/shared/model';
 import {parseLrc} from '../src/lyrics/parsers';
 import {followingLine} from '../src/shared/timing';
@@ -47,7 +48,20 @@ test('Missing AI keys and aborted translations fail without producing fabricated
  const dir=await mkdtemp(join(tmpdir(),'lyrics-translation-abort-'));
  try{
   const engine=new TranslationEngine(dir,async()=>{throw new Error('Should not contact a service');});
-  await assert.rejects(()=>engine.translate(track,lyrics,defaults,'',new AbortController().signal,()=>{}),/مفتاح/);
+  await assert.rejects(()=>engine.translate(track,lyrics,defaults,'',new AbortController().signal,()=>{}),/API key/);
   const controller=new AbortController();controller.abort();await assert.rejects(()=>engine.translate(track,lyrics,defaults,'fixture',controller.signal,()=>{}));
  }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('Automatic translation handles Arabic to English and English to Arabic while explicit languages override it',()=>{
+ assert.equal(targetLanguage('مرحبا بالعالم',defaults),'en');assert.equal(targetLanguage('Hello world',defaults),'ar');
+ assert.equal(targetLanguage('Hello world',{...defaults,translationTarget:'ja'}),'ja');
+ assert.notEqual(translationIdentity(track,lyrics,defaults),translationIdentity(track,lyrics,{...defaults,translationStyle:'faithful'}));
+ assert.equal(translationIdentity(track,lyrics,defaults),translationIdentity(track,lyrics,{...defaults,translationGlow:12,translationColor:'#abcdef'}));
+});
+test('Visual word estimates preserve Unicode ranges and original provider timing; exact word timing always wins',()=>{
+ const line={text:'مرحبا بالعالم · 音楽 hello',startMs:1000,endMs:6000};
+ assert.deepEqual(visualWords(line,false),[]);
+ const words=visualWords(line,true);assert.ok(words.length>=4);assert.equal(words[0]!.startMs,1000);assert.equal(words.at(-1)!.endMs,6000);
+ assert.ok(words.every((w,i)=>w.endMs>w.startMs&&line.text.slice(w.from,w.to).length>0&&(i===0||w.startMs===words[i-1]!.endMs)));
+ assert.ok(!('words' in line));const exact=[{from:0,to:5,startMs:1200,endMs:1800}];assert.equal(visualWords({...line,words:exact},true),exact);
 });

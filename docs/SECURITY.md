@@ -14,7 +14,7 @@ Authentication must finish in eight seconds. Messages are schema validated, text
 
 ## Renderer isolation
 
-Both Electron renderers use sandboxing, context isolation, no Node integration, a minimal role-limited preload, denied permissions, navigation/pop-up blocking and restrictive CSP. Renderer networking is disabled. Main-process IPC validates window identity, exact frame URL, role and arguments again. Only Settings can provision the extension, change settings, import lyrics, configure translation keys or request translations. The overlay can observe state, open Settings and edit/resize while editing.
+Both Electron renderers use sandboxing, context isolation, no Node integration, a minimal role-limited preload, denied permissions, navigation/pop-up blocking and restrictive CSP. Renderer API networking is disabled; images are permitted only from bundled assets, data URLs and Spotify's exact `https://i.scdn.co` host. The protocol accepts only constrained `/image/` artwork URLs, not arbitrary addresses. Main-process IPC validates window identity, exact frame URL, role and arguments again. Only Settings can provision the extension, change settings, import lyrics, configure translation keys or request translations. The overlay can observe state, open Settings and edit/resize while editing.
 
 No raw shell, filesystem, arbitrary URL-fetch or IPC primitives reach renderer pages. Developer/external links are a fixed allowlist. Spicetify installation uses discrete arguments without a shell. Imports use a native file picker and a 2 MB limit. XML DTDs/entities are forbidden and nesting is bounded. Provider text is inserted as text rather than HTML.
 

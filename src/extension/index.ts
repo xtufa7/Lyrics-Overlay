@@ -1,4 +1,5 @@
-import { PORT, PROTOCOL, type Playback, type Track } from '../shared/model';
+import {PORT,PROTOCOL} from '../shared/protocol';
+import type {Playback,Track} from '../shared/model';
 
 type Item = {uri?:string;name?:string;duration?:{milliseconds?:number};artists?:{name:string}[];album?:{name?:string};metadata?:Record<string,string>};
 interface SpicetifyApi {
@@ -30,7 +31,10 @@ function boot() {
     if (!title || !artist) return null;
     const durationMs=Spicetify.Player.getDuration();
     if (!Number.isFinite(durationMs) || durationMs<=0) return null;
-    return {uri:item.uri,title,artist,album:item.album?.name || m.album_title || '',durationMs};
+    const image=m.image_url||m.image_large_url||m.image_xlarge_url||'';
+    const candidate=image.startsWith('spotify:image:')?`https://i.scdn.co/image/${image.slice('spotify:image:'.length)}`:image;
+    const artwork=/^https:\/\/i\.scdn\.co\/image\/[a-f\d]{20,80}$/i.test(candidate)?candidate:undefined;
+    return {uri:item.uri,title,artist,album:item.album?.name || m.album_title || '',durationMs,...artwork?{artwork}:{}};
   }
   function snapshot(force=false) {
     if (!ready) return;

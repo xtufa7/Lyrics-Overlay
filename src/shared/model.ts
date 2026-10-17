@@ -1,11 +1,12 @@
 import { z } from 'zod';
 
-export const PORT = 43827;
-export const PROTOCOL = 1;
+import {PORT,PROTOCOL} from './protocol';
+export {PORT,PROTOCOL};
 export const trackSchema = z.object({
   uri: z.string().min(1).max(500), title: z.string().min(1).max(500),
   artist: z.string().min(1).max(500), album: z.string().max(500),
   durationMs: z.number().finite().min(0).max(86_400_000)
+  ,artwork:z.string().regex(/^https:\/\/i\.scdn\.co\/image\/[a-f\d]{20,80}$/i).optional()
 });
 export type Track = z.infer<typeof trackSchema>;
 export const playbackSchema = z.object({
@@ -23,6 +24,11 @@ export type Word = { startMs: number; endMs: number; from: number; to: number };
 export type LyricLine = { startMs: number; endMs: number; text: string; words?: Word[] };
 export type Lyrics = { kind: 'synced' | 'word' | 'plain' | 'instrumental'; lines: LyricLine[]; source: string; fetchedAt: number };
 export const settingsSchema = z.object({
+  theme:z.enum(['midnight','graphite','ocean','forest','light']).default('midnight'),
+  wordHighlight:z.enum(['word','sweep','off']).default('word'),
+  wordTiming:z.enum(['estimate','exact']).default('estimate'),
+  wordUnderline:z.boolean().default(true),
+  showArtwork:z.boolean().default(true),tourComplete:z.boolean().default(false),
   visible: z.boolean().default(true), monitor: z.string().max(100).default('primary'),
   x: z.number().finite().nullable().default(null), y: z.number().finite().nullable().default(null),
   width: z.number().int().min(240).max(2400).default(680), height: z.number().int().min(40).max(600).default(116),
@@ -41,9 +47,16 @@ export const settingsSchema = z.object({
   onlineLyrics: z.boolean().default(true),
   showNext: z.boolean().default(true), nextOpacity: z.number().min(.1).max(.8).default(.38),
   showTranslation: z.boolean().default(false), translationProvider: z.enum(['gemini','ollama','mymemory']).default('gemini'),
-  translationTarget: z.enum(['ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('ar'),
+  translationTarget: z.enum(['auto','ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('auto'),
   translationSource: z.enum(['auto','ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('auto'),
   translationModel: z.string().min(1).max(120).default('gemini-3.8-flash'),
+  translationStyle:z.enum(['natural','faithful','poetic']).default('natural'),
+  translationFont:z.enum(['auto','Inter','Cairo','Noto Sans JP','Segoe UI']).default('auto'),
+  translationSize:z.number().min(.5).max(1.2).default(.68),
+  translationOpacity:z.number().min(.2).max(1).default(.85),
+  translationColor:z.string().regex(/^#[\da-f]{6}$/i).default('#c6c3d5'),
+  translationPlacement:z.enum(['above','below']).default('below'),
+  translationGlow:z.number().min(0).max(24).default(0),
   ollamaUrl: z.string().url().max(300).default('http://127.0.0.1:11434'),
   savedPosition: z.object({x:z.number().finite(),y:z.number().finite(),width:z.number().int().min(240).max(2400),height:z.number().int().min(40).max(600),monitor:z.string().max(100)}).nullable().default(null),
   visibilityShortcut: z.string().min(1).max(100).default('Control+Alt+L'), editShortcut: z.string().min(1).max(100).default('Control+Alt+E'),

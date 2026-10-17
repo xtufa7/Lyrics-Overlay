@@ -2,7 +2,7 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
 import { WebSocket } from 'ws';
 import { once } from 'node:events';
 import { join, resolve } from 'node:path';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile,readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { LyricsStore } from '../src/main/store';
 import { parseTtml } from '../src/lyrics/parsers';
@@ -11,7 +11,8 @@ import {createServer,type Server} from 'node:http';
 
 async function main() {
   const dir=resolve('work',`desktop-${Date.now()}`);await mkdir(dir,{recursive:true});
-  const track:Track={uri:'spotify:track:overlay-fixture',title:'Original overlay test',artist:'Test fixture',album:'Verification',durationMs:40000};
+  await writeFile(join(dir,'settings.json'),JSON.stringify({tourComplete:true}));
+  const track:Track={uri:'spotify:track:overlay-fixture',title:'Original overlay test',artist:'Test fixture',album:'Verification',durationMs:40000,artwork:'https://i.scdn.co/image/0000000000000000000000000000000000000000'};
   const store=new LyricsStore(dir,[]);await store.initialize();
   const lyrics=parseTtml('<tt><body><p begin="0s" end="10s"><span begin="0s" dur="4s">مرحبا</span> <span begin="4s" dur="4s">بالعالم</span></p><p begin="10s" end="20s">The evening finds its rhythm</p><p begin="20s" end="30s">音楽とともに 夜を歩こう</p><p begin="30s" end="40s">هذا المساء feels like home 2026</p></body></tt>',40000);
   await store.import(track,lyrics);
@@ -21,6 +22,7 @@ async function main() {
   const launch=async()=>{
     const exe=process.env.LYRICS_OVERLAY_EXE;
     const instance=await electron.launch({...exe?{executablePath:resolve(exe),args:['--settings']}:{args:[resolve('.'),'--settings']},env,timeout:40000});
+    await instance.context().route('https://i.scdn.co/image/**',route=>route.fulfill({contentType:'image/png',path:resolve('assets/app-icon.png')}));
     instance.process().stderr?.on('data',chunk=>{const message=String(chunk);if(/uncaught|Tray is destroyed|Object has been destroyed|MAIN_ERROR_BOX/i.test(message))mainErrors.push(message);});
     // Make a main-process exception fail this test instead of hanging behind a native dialog.
     await instance.evaluate(({dialog})=>{dialog.showErrorBox=(title,content)=>{console.error('MAIN_ERROR_BOX',title,content);process.exitCode=1;};});
@@ -33,6 +35,7 @@ async function main() {
   };
   try{
     let launched=await launch();app=launched.instance;let {settings,overlay}=launched;
+    check(await settings.evaluate(()=>document.documentElement.lang==='en'&&document.documentElement.dir==='ltr')&&(await settings.locator('nav').innerText()).includes('Appearance'),'Interface uses English and left-to-right navigation');
     const security=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().map(w=>({url:w.webContents.getURL(),prefs:(w.webContents as unknown as {getLastWebPreferences():Electron.WebPreferences}).getLastWebPreferences(),top:w.isAlwaysOnTop(),focusable:w.isFocusable(),bounds:w.getBounds()})));
     const native=security.find(w=>w.url.endsWith('overlay.html'))!;
     check(native.top&&!native.focusable,'Overlay is always on top and does not accept focus');
@@ -53,7 +56,7 @@ async function main() {
     check(await overlay.locator('#next-line').textContent()==='The evening finds its rhythm','Upcoming sentence is rendered independently beneath the current line');
     check(await overlay.locator('.lyric-block').evaluate(el=>el.getAnimations().some(a=>String((a.effect as KeyframeEffect).getKeyframes()[0]?.transform).includes('translateX(14px)'))),'Arabic entrance animation originates from the right');
     await overlay.waitForTimeout(400);send(1000,false);await overlay.waitForTimeout(30);
-    await settings.evaluate(()=>window.overlay.updateSettings({preset:'karaoke',border:true,fontSize:26}));
+    await settings.evaluate(()=>window.overlay.updateSettings({preset:'karaoke',wordHighlight:'sweep',border:true,fontSize:26}));
     check(await overlay.locator('#lyrics').evaluate(el=>getComputedStyle(el).borderTopWidth==='0px'&&getComputedStyle(el).backgroundColor==='rgba(0, 0, 0, 0)'),'Lyrics remain frameless and transparent even when legacy border settings exist');
     await overlay.waitForFunction(()=>!!document.querySelector<HTMLElement>('.lyric-highlight')?.style.clipPath.startsWith('path'));
     const mask1=await overlay.locator('.lyric-highlight').evaluate(el=>(el as HTMLElement).style.clipPath);
@@ -107,9 +110,43 @@ async function main() {
     await settings.selectOption('#preview-language','ar');await settings.evaluate(()=>document.fonts.ready);await settings.waitForTimeout(650);
     await settings.screenshot({path:join(dir,'settings-arabic.png')});await overlay.screenshot({path:join(dir,'overlay-arabic.png'),omitBackground:true});
     await settings.click('[data-tab="about"]');
-    check(await settings.locator('.about-card').innerText().then(t=>t.includes('Nour Al-Shammari')&&t.includes('0xTuFa7')),'Developer attribution and verified public account links are available');
+    check(await settings.locator('#developer-links button').count()===2&&await settings.locator('.about-identity img').evaluate(el=>(el as HTMLImageElement).naturalWidth>0),'About stays minimal with two public links and the new artwork');
     await settings.screenshot({path:join(dir,'about.png')});
     await settings.click('[data-tab="translation"]');await settings.screenshot({path:join(dir,'translation.png')});
+    await settings.click('[data-tab="appearance"]');
+    check(await settings.locator('button[data-theme]').count()===5,'Five lightweight built-in themes are available');
+    await settings.click('button[data-theme="ocean"]');await settings.waitForFunction(()=>document.documentElement.dataset.theme==='ocean');
+    const ocean=await settings.evaluate(()=>getComputedStyle(document.body).backgroundColor);
+    await settings.click('button[data-theme="light"]');await settings.waitForFunction(()=>document.documentElement.dataset.theme==='light');
+    check(ocean!==await settings.evaluate(()=>getComputedStyle(document.body).backgroundColor),'Theme selection changes actual interface colors');
+    await settings.click('button[data-theme="midnight"]');
+    await overlay.waitForFunction(()=>!!document.querySelector<HTMLImageElement>('#overlay-artwork')?.naturalWidth);
+    check(await settings.locator('[data-artwork]').first().evaluate(el=>(el as HTMLImageElement).naturalWidth>0),'Spotify artwork reaches both the desktop overlay and now-playing UI');
+    await settings.evaluate(()=>window.overlay.updateSettings({showArtwork:false}));
+    check(await overlay.locator('#overlay-artwork').isHidden(),'Album cover can be hidden independently');
+    await settings.evaluate(()=>window.overlay.updateSettings({showArtwork:true,wordHighlight:'word',wordTiming:'estimate',wordUnderline:true,glow:8}));
+    send(11000,true,'visual-estimate');await overlay.waitForFunction(()=>document.querySelector('.lyric-text')?.textContent?.startsWith('The evening'));
+    await overlay.waitForFunction(()=>!document.querySelector<HTMLElement>('.word-underline')?.hidden);
+    const firstUnderline=await overlay.locator('.word-underline').evaluate(el=>(el as HTMLElement).style.transform);
+    await overlay.waitForTimeout(1500);
+    check(firstUnderline!==await overlay.locator('.word-underline').evaluate(el=>(el as HTMLElement).style.transform),'Line-synced lyrics get a moving current-word underline without changing provider timestamps');
+    send(12000,false,'visual-estimate');await overlay.waitForTimeout(100);
+    const frozen=await overlay.locator('.lyric-highlight').evaluate(el=>(el as HTMLElement).style.clipPath);await overlay.waitForTimeout(250);
+    check(frozen===await overlay.locator('.lyric-highlight').evaluate(el=>(el as HTMLElement).style.clipPath),'Estimated word motion freezes on pause');
+    await settings.evaluate(()=>window.overlay.updateSettings({wordTiming:'exact'}));
+    check(await overlay.locator('.lyric-highlight').evaluate(el=>(el as HTMLElement).style.visibility==='hidden'),'Exact-only timing does not fabricate word timestamps for line-synced cues');
+    await settings.evaluate(()=>window.overlay.updateSettings({wordTiming:'estimate',translationColor:'#ffbb88',translationSize:.9,translationGlow:9,translationPlacement:'above'}));
+    check(await overlay.locator('#translation-line').evaluate(el=>{const s=getComputedStyle(el);return s.color==='rgb(255, 187, 136)'&&s.order==='-1'&&s.textShadow.includes('9px');}),'Translation color, size, glow and position apply independently');
+    await settings.click('#quick-translation');
+    check(await overlay.locator('#translation-line').isHidden(),'Quick translation switch hides translated text immediately');
+    await settings.click('#quick-translation');
+    check(await overlay.locator('#translation-line').isVisible(),'Quick translation switch restores cached text without a new translation request');
+    await settings.click('[data-tab="about"]');await settings.click('#start-tour');
+    await settings.locator('.tour-card').waitFor();
+    check(await settings.locator('.tour-focus').evaluate(el=>getComputedStyle(el).borderRadius==='50%'),'Quick tour highlights real controls with a circular spotlight');
+    await settings.click('#tour-next');await settings.waitForFunction(()=>document.querySelector('#tour-title')?.textContent==='Make it yours');
+    await settings.screenshot({path:join(dir,'quick-tour.png')});await settings.click('#tour-skip');
+    check(await settings.locator('.tour-layer').count()===0&&(await settings.evaluate(()=>window.overlay.getState())).settings.tourComplete,'Tour can be skipped and completion is persisted');
     send(1000,false,'new',{...track,uri:'spotify:track:missing',title:'Missing'});
     send(1000,false,'latest',track);
     await overlay.waitForFunction(()=>document.querySelector('.lyric-text')?.textContent==='مرحبا بالعالم');

@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { mkdir, copyFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, copyFile, readdir, writeFile,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 
@@ -18,7 +18,7 @@ function png(size,tray=false){
   const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(size);ihdr.writeUInt32BE(size,4);ihdr[8]=8;ihdr[9]=6;
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);
 }
-const icon=png(256),ico=Buffer.alloc(22);ico.writeUInt16LE(1,2);ico.writeUInt16LE(1,4);ico.writeUInt16LE(1,10);ico.writeUInt16LE(32,12);ico.writeUInt32LE(icon.length,14);ico.writeUInt32LE(22,18);
+const icon=await readFile('assets/app-icon.png'),ico=Buffer.alloc(22);ico.writeUInt16LE(1,2);ico.writeUInt16LE(1,4);ico.writeUInt16LE(1,10);ico.writeUInt16LE(32,12);ico.writeUInt32LE(icon.length,14);ico.writeUInt32LE(22,18);
 await writeFile('assets/icon.ico',Buffer.concat([ico,icon]));await writeFile('dist/assets/tray.png',png(32,true));
 await Promise.all([
   build({entryPoints:['src/main/index.ts'],outfile:'dist/main.cjs',bundle:true,platform:'node',format:'cjs',target:'node24',external:['electron'],sourcemap:true}),
@@ -28,6 +28,9 @@ await Promise.all([
 ]);
 for(const name of ['settings','overlay'])await copyFile(`src/renderer/${name}.html`,`dist/renderer/${name}.html`);
 await copyFile('dist/extension/lyrics-overlay.js','lyrics-overlay.js');
+await copyFile('assets/app-icon.png','dist/assets/app-icon.png');
+await copyFile('assets/app-icon.png','dist/renderer/app-icon.png');
+await copyFile('assets/artwork.png','dist/renderer/artwork.png');
 await mkdir('dist/licenses',{recursive:true});
 for(const font of ['inter','cairo','noto-sans-jp'])await copyFile(`node_modules/@fontsource/${font}/LICENSE`,`dist/licenses/${font}-OFL.txt`);
 await copyFile('LICENSE','dist/licenses/MIT.txt');

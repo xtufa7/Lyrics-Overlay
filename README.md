@@ -4,7 +4,7 @@
 
 ![Lyrics Overlay](assets/preview.png)
 
-Current words, a quieter upcoming sentence, and optional translation above your applications. No permanent rectangle, toolbar, artwork or background. Arabic stays joined and shapes naturally. The desktop companion runs independently of Spotify and passes clicks through.
+Current words, a quieter upcoming sentence, optional translation and album cover above your applications. No permanent rectangle, toolbar or background. The settings interface is English; lyrics and translations retain their own language and direction. The desktop companion runs independently of Spotify and passes clicks through.
 
 ## Download
 
@@ -23,7 +23,7 @@ You can [read the script](install.ps1) first, or download/extract the ZIP yourse
 ### Connect Spotify
 
 1. Open Lyrics Overlay.
-2. Click **ربط Spotify / Connect Spotify** on the home screen.
+2. Click **Connect Spotify** on the home screen.
 3. The companion installs its extension, provisions an authenticated local credential and applies Spicetify. Spotify may restart. No Spotify login, password or manual pairing code is needed.
 4. Play a song. The home screen shows the actual connection, current track and lyrics source. You can minimize Spotify or close Settings while the tray app stays running.
 
@@ -33,6 +33,10 @@ The advanced section retains manual pairing as a fallback. **Repair / update con
 
 | Feature | Behavior |
 | --- | --- |
+| Themes | Midnight, Graphite, Ocean, Forest and Daylight; instant previews |
+| Album artwork | Spotify cover in now playing; optional cover beside desktop lyrics |
+| Guided tour | First-run circular spotlights; skip or replay from About |
+| Word motion | Current-word color or progressive sweep, plus an optional moving underline |
 | Frameless lyrics | Transparent normal mode; legacy border/background settings are ignored |
 | Upcoming sentence | Optional smaller, dimmer next cue; blanks and final cues handled correctly |
 | Saved position | Save the current location, then restore it and show lyrics with one shortcut |
@@ -43,13 +47,19 @@ The advanced section retains manual pairing as a fallback. **Repair / update con
 | Sources | Strict LRCLIB lookup/search, local LRC/TTML/TXT imports, disk cache |
 | Translation | Contextual Gemini, local Ollama, or basic keyless MyMemory |
 
+Real word timestamps always take priority. For ordinary line-synced lyrics, **Estimate when needed** distributes a visual word highlight across the line; it cannot recover the singer's exact word timing. **Exact timestamps only** turns these estimates off. Provider timestamps and lyric files are never altered. Motion presets animate line transitions independently from word highlighting.
+
+The Spotify extension is about **4.5 KB** without a bundled desktop validation library. Overlay updates are capped at 30 fps while playing and stop when paused or hidden. Settings previews stop while hidden or on About. The companion includes Electron's runtime; the small extension size is not the total application size.
+
 Default shortcuts are **Ctrl + Alt + L** (visibility), **Ctrl + Alt + E** (edit), and **Ctrl + Alt + P** (show at saved position). If a shortcut is already occupied, the app selects an available alternative and displays it in the position/settings UI. Click a shortcut field and press a new combination to customize it.
 
-Use Edit Mode to drag the overlay or resize its bottom-right corner. **Done**, Escape or the edit shortcut returns to click-through mode. Placement presets, explicit coordinates and display selection are available under **الموضع والاختصارات**. Measurements use Windows logical pixels. A disconnected/rescaled monitor is handled by clamping bounds to an available work area.
+Use Edit Mode to drag the overlay or resize its bottom-right corner. **Done**, Escape or the edit shortcut returns to click-through mode. Placement presets, explicit coordinates and display selection are available under **Position & shortcuts**. Measurements use Windows logical pixels. A disconnected/rescaled monitor is handled by clamping bounds to an available work area.
 
 ## Translation
 
-Translation is requested explicitly under **الترجمة**; enabling display alone does not send a song to a service.
+Translation is requested explicitly under **Translation**; enabling display alone does not send a song to a service. **Automatic · Arabic ↔ English** translates Arabic lines into English and English lines into Arabic. Select a target language to override this. The header switch instantly hides or restores translation.
+
+Translation has its own font, size, color, glow, opacity and above/below placement. AI providers support natural, faithful and poetic styles, with separate cache identities so changing the style cannot silently reuse a different result.
 
 - **Gemini** translates up to 30 requested lines per batch with surrounding context, track title and artist. Supply your own API key and a model available to your account. Provider limits/billing apply. Keys are encrypted using Windows DPAPI through Electron `safeStorage`; they are never sent to Spotify or returned in state snapshots.
 - **Ollama** uses a model already installed on your computer (for example `qwen3:8b`). Run its local server and select the model. Only `http://127.0.0.1` endpoints are accepted; no API key is needed and lyric text stays local.
@@ -59,7 +69,7 @@ Gemini and MyMemory receive lyric text when you request translation. Translation
 
 ## Lyrics formats
 
-- LRC supports repeated timestamps, fractions, `[offset:]`, simultaneous lines and timed blank cues. Line timing is never turned into fake word timing.
+- LRC supports repeated timestamps, fractions, `[offset:]`, simultaneous lines and timed blank cues. Original line timing is preserved; optional word estimates exist only in the presentation layer.
 - TTML supports parallel containers, relative `begin`/`end`/`dur`, clock/offset/frame/tick expressions with explicit rates, nested timed spans and `<br>`. An absolute-span import option supports music exports. Sequential containers, overlapping vocal paragraphs, wall-clock/drop-frame timing and XML DTD/entity declarations are explicitly rejected. This is a documented TTML subset.
 - Karaoke clips a full shaped duplicate using real timed-span ranges. It does not split Arabic into disconnected glyph elements. Untimed portions remain unhighlighted.
 - TXT/plain lyrics remain unsynchronized. Select a line manually in the lyrics panel.

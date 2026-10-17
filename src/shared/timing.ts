@@ -1,4 +1,4 @@
-import type { LyricLine, Playback } from './model';
+import type { LyricLine, Playback, Word } from './model';
 
 // Time is anchored to each process's own monotonic clock. No wall-clock deltas cross processes.
 export class PlaybackClock {
@@ -40,4 +40,13 @@ export function graphemes(text: string): string[] {
 export function followingLine(lines:LyricLine[],index:number,position:number):LyricLine|null {
   for(let i=Math.max(0,index+1);i<lines.length;i++)if(lines[i]!.text.trim()&&(index>=0||lines[i]!.startMs>position))return lines[i]!;
   return null;
+}
+// Presentation-only estimates for line-synced sources. Never stored as provider word timings.
+export function visualWords(line:LyricLine,estimate:boolean):Word[] {
+  if(line.words?.length)return line.words;
+  if(!estimate||line.endMs<=line.startMs)return [];
+  const segments=[...new Intl.Segmenter(undefined,{granularity:'word'}).segment(line.text)].filter(s=>s.isWordLike);
+  const weights=segments.map(s=>Math.sqrt(Math.max(1,graphemes(s.segment).length))),total=weights.reduce((a,b)=>a+b,0);
+  let elapsed=0;const duration=Math.min(14000,line.endMs-line.startMs);
+  return segments.map((s,i)=>{const startMs=line.startMs+duration*elapsed/total;elapsed+=weights[i]!;return{from:s.index,to:s.index+s.segment.length,startMs,endMs:line.startMs+duration*elapsed/total};});
 }

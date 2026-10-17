@@ -18,9 +18,9 @@ const smoke = process.env.LYRICS_OVERLAY_TEST === '1';
 if (smoke && process.env.LYRICS_OVERLAY_DATA) app.setPath('userData',resolve(process.env.LYRICS_OVERLAY_DATA));
 app.setName('Spicetify Lyrics Overlay');
 const gotLock=app.requestSingleInstanceLock();
-if (!gotLock) app.quit();
+if (!gotLock||process.argv.includes('--quit')) app.quit();
 else {
-  app.on('second-instance',(_event,args)=>{openSettings();if(state&&args.includes('--connect-spotify'))void installExtension().catch(()=>{});});
+  app.on('second-instance',(_event,args)=>{if(args.includes('--quit')){app.quit();return;}openSettings();if(state&&args.includes('--connect-spotify'))void installExtension().catch(()=>{});});
   app.on('window-all-closed',()=>{}); // Tray app: closing settings must not close the overlay.
   app.whenReady().then(start).catch(error=>{dialog.showErrorBox('Lyrics Overlay could not start',String(error));app.quit();});
 }
@@ -63,6 +63,7 @@ function shutdown() {
 }
 app.on('before-quit',shutdown);
 function displayFor(s:Settings) {return screen.getAllDisplays().find(d=>String(d.id)===s.monitor)??screen.getPrimaryDisplay();}
+function titleBar(s:Settings){return {color:({midnight:'#1d1d2d',graphite:'#161719',ocean:'#101e2b',forest:'#15221e',light:'#f5f5fa'})[s.theme],symbolColor:s.theme==='light'?'#232738':'#d7d9ed',height:36};}
 function geometry(s:Settings) {
   const area=displayFor(s).workArea;
   const width=Math.min(s.width,area.width),height=Math.min(s.height,area.height);
@@ -75,12 +76,15 @@ async function start() {
   store=new SettingsStore(dir);await store.load();
   const migrated=await readJson(join(dir,'layout-v2.json'),false);
   if(!migrated){await store.save({border:false,glass:false,height:Math.max(116,store.value.height)});await atomicJson(join(dir,'layout-v2.json'),true);}
+  const updated=await readJson(join(dir,'layout-v21.json'),false);
+  if(!updated){await store.save({translationTarget:'auto'});await atomicJson(join(dir,'layout-v21.json'),true);}
+  if(app.isPackaged&&store.value.autoStart)app.setLoginItemSettings({openAtLogin:true,path:process.execPath,args:['--background']});
   offsets=await readJson(join(dir,'offsets.json'),{});
   lyricsStore=new LyricsStore(dir,[new LrclibProvider()]);await lyricsStore.initialize();
   translator=new TranslationEngine(dir);
   const secret=await readJson<{gemini?:string}>(join(dir,'secrets.json'),{});
   if(secret.gemini&&safeStorage.isEncryptionAvailable()){try{translationKey=safeStorage.decryptString(Buffer.from(secret.gemini,'base64'));}catch{translationKey='';}}
-  state={settings:store.value,connected:false,playback:null,lyrics:null,status:'بانتظار تشغيل أغنية',edit:false,warnings:[],trackOffsetMs:0,plainIndex:0,setupStatus:'اضغط ربط Spotify للبدء',connectionPhase:'idle',translations:[],translationStatus:'لم تُترجم هذه الأغنية بعد',translationKeySet:!!translationKey};
+  state={settings:store.value,connected:false,playback:null,lyrics:null,status:'Waiting for a song',edit:false,warnings:[],trackOffsetMs:0,plainIndex:0,setupStatus:'Choose Connect Spotify to get started',connectionPhase:'idle',translations:[],translationStatus:'This song has not been translated',translationKeySet:!!translationKey};
   overlay=new BrowserWindow({...geometry(store.value),show:false,transparent:true,frame:false,thickFrame:false,resizable:false,skipTaskbar:true,focusable:false,hasShadow:false,alwaysOnTop:true,backgroundColor:'#00000000',title:'Lyrics Overlay',webPreferences:preferences('overlay')});
   overlay.setAlwaysOnTop(true,'screen-saver');overlay.setIgnoreMouseEvents(true,{forward:true});
   secureWindow(overlay,'overlay');
@@ -100,14 +104,14 @@ async function start() {
     connected:connected=>{
       if(closing)return;
       state.connected=connected;
-      if(!connected){lyricRequest?.abort();translationRequest?.abort();translationGeneration++;requestGeneration++;state.playback=null;state.lyrics=null;state.translations=[];state.status='انقطع Spotify';if(state.connectionPhase!=='installing')state.connectionPhase='waiting';state.setupStatus='بانتظار عودة Spotify؛ افتح التطبيق أو اضغط إصلاح الربط';}
-      else{state.status='متصل؛ بانتظار بيانات التشغيل';state.connectionPhase='connected';state.setupStatus='تم الربط بنجاح · الاتصال محلي على جهازك';}
+      if(!connected){lyricRequest?.abort();translationRequest?.abort();translationGeneration++;requestGeneration++;state.playback=null;state.lyrics=null;state.translations=[];state.status='Spotify disconnected';if(state.connectionPhase!=='installing')state.connectionPhase='waiting';state.setupStatus='Waiting for Spotify. Open it or choose Repair connection.';}
+      else{state.status='Connected; waiting for playback';state.connectionPhase='connected';state.setupStatus='Connected securely on this device';}
       broadcast();
     },
     command:action=>{if(action==='toggle')void patchSettings({visible:!state.settings.visible});else openSettings();},
     error:warning
   },smoke?43828:PORT);
-  try {await bridge.start();} catch {state.connectionPhase='error';state.setupStatus='المنفذ المحلي 43827 مشغول. أغلق أي نسخة أخرى من التطبيق وأعد تشغيله.';warning(state.setupStatus);}
+  try {await bridge.start();} catch {state.connectionPhase='error';state.setupStatus='Local port 43827 is busy. Close other copies of Lyrics Overlay and restart.';warning(state.setupStatus);}
   await overlay.loadFile(page('overlay'));
   if(process.argv.includes('--settings')||!process.argv.includes('--background'))openSettings();
   await atomicJson(join(dir,'onboarded.json'),true);
@@ -116,19 +120,19 @@ async function start() {
 function updateTray() {
   if(closing||!tray||tray.isDestroyed()||!state)return;
   tray.setContextMenu(Menu.buildFromTemplate([
-    {label:state.connected?'Spotify متصل':'بانتظار Spotify',enabled:false},
+    {label:state.connected?'Spotify connected':'Waiting for Spotify',enabled:false},
     {type:'separator'},
-    {label:'إظهار الكلمات',type:'checkbox',checked:state.settings.visible,click:()=>void patchSettings({visible:!state.settings.visible})},
-    {label:'إظهار في الموضع المحفوظ',click:()=>void restorePosition()},
-    {label:'تحريك وتغيير الحجم',type:'checkbox',checked:state.edit,click:()=>setEdit(!state.edit)},
-    {label:'الإعدادات…',click:()=>openSettings()},
-    {type:'separator'},{label:'خروج',click:()=>app.quit()}
+    {label:'Show lyrics',type:'checkbox',checked:state.settings.visible,click:()=>void patchSettings({visible:!state.settings.visible})},
+    {label:'Show at saved position',click:()=>void restorePosition()},
+    {label:'Move & resize',type:'checkbox',checked:state.edit,click:()=>setEdit(!state.edit)},
+    {label:'Settings…',click:()=>openSettings()},
+    {type:'separator'},{label:'Quit',click:()=>app.quit()}
   ]));
 }
 function openSettings() {
   if(closing||!state)return;
   if(settingsWindow&&!settingsWindow.isDestroyed()){settingsWindow.show();settingsWindow.focus();return;}
-  settingsWindow=new BrowserWindow({width:1180,height:860,minWidth:960,minHeight:720,show:false,backgroundColor:'#101014',title:'Lyrics Overlay · 0xTuFa7',titleBarStyle:'hidden',titleBarOverlay:{color:'#101014',symbolColor:'#c9c3d8',height:36},autoHideMenuBar:true,webPreferences:preferences('settings')});
+  settingsWindow=new BrowserWindow({width:1180,height:860,minWidth:960,minHeight:720,show:false,backgroundColor:titleBar(state.settings).color,icon:join(__dirname,'assets/app-icon.png'),title:'Lyrics Overlay',titleBarStyle:'hidden',titleBarOverlay:titleBar(state.settings),autoHideMenuBar:true,webPreferences:preferences('settings')});
   secureWindow(settingsWindow,'settings');
   settingsWindow.once('ready-to-show',()=>{if(!closing)settingsWindow?.show();});
   settingsWindow.on('closed',()=>{settingsWindow=null;});
@@ -156,7 +160,7 @@ async function registerShortcuts() {
     for(const candidate of [desired,`Control+Alt+Shift+${letter}`,`Control+Shift+${fkey}`]){
       try{if(globalShortcut.register(candidate,callback)){registered=candidate;break;}}catch{}
     }
-    if(!registered)state.warnings.push(`الاختصار ${desired} غير متاح. اختر تركيبة أخرى من الموضع والاختصارات.`);
+    if(!registered)state.warnings.push(`Shortcut ${desired} is unavailable. Choose another in Position & shortcuts.`);
     else if(registered!==desired)updates[key]=registered;
   }
   if(Object.keys(updates).length){await store.save(updates);state.settings=store.value;}
@@ -169,6 +173,7 @@ function patchSettings(patch:Partial<Settings>):Promise<void> {
     await store.save(patch);state.settings=store.value;
     if(closing)return;
     const s=state.settings;
+    if(s.theme!==previous.theme&&settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.setTitleBarOverlay(titleBar(s));
     if(['x','y','width','height','monitor'].some(k=>k in patch))overlay?.setBounds(geometry(s));
     if(s.visible||state.edit)overlay?.showInactive();else overlay?.hide();
     if(s.visibilityShortcut!==previous.visibilityShortcut||s.editShortcut!==previous.editShortcut||s.positionShortcut!==previous.positionShortcut)await registerShortcuts();
@@ -177,10 +182,18 @@ function patchSettings(patch:Partial<Settings>):Promise<void> {
       else warning('Startup registration is available in the installed app.');
     }
     if(s.onlineLyrics!==previous.onlineLyrics)void loadLyrics(true);
-    if(['translationProvider','translationTarget','translationSource','translationModel','ollamaUrl'].some(key=>key in patch&&s[key as keyof Settings]!==previous[key as keyof Settings])){translationRequest?.abort();translationGeneration++;state.translations=[];state.translationStatus='تغيّر إعداد المترجم؛ اضغط ترجم الأغنية';}
+    if(['translationProvider','translationTarget','translationSource','translationModel','translationStyle','ollamaUrl'].some(key=>key in patch&&s[key as keyof Settings]!==previous[key as keyof Settings])){translationRequest?.abort();translationGeneration++;state.translations=[];state.translationStatus='Translation settings changed; choose Translate song';}
+    if(s.showTranslation&&!previous.showTranslation&&!state.translations.length)void restoreCachedTranslation();
     broadcast();
   });
   writeQueue=next.catch(()=>{});return next;
+}
+async function restoreCachedTranslation(){
+  const track=state.playback?.track,lyrics=state.lyrics,generation=translationGeneration;
+  if(!track||!lyrics)return;
+  const cached=await translator.cached(track,lyrics,state.settings);
+  if(closing||generation!==translationGeneration||!state.settings.showTranslation||state.lyrics!==lyrics)return;
+  if(cached){state.translations=cached;state.translationStatus='Cached translation ready';broadcast();}
 }
 async function restorePosition(){
   const saved=state.settings.savedPosition;
@@ -206,7 +219,7 @@ function receivePlayback(p:Playback) {
   const changed=!previous||previous.revision!==p.revision||previous.track?.uri!==p.track?.uri;
   state.playback=p;
   if(changed){
-    translationRequest?.abort();translationGeneration++;state.translations=[];state.translationStatus='لم تُترجم هذه الأغنية بعد';
+    translationRequest?.abort();translationGeneration++;state.translations=[];state.translationStatus='This song has not been translated';
     state.lyrics=null;state.plainIndex=0;state.trackOffsetMs=p.track ? offsets[trackKey(p.track)]??0 : 0;
     void loadLyrics();
   }
@@ -215,23 +228,23 @@ function receivePlayback(p:Playback) {
 async function loadLyrics(refresh=false) {
   lyricRequest?.abort();const generation=++requestGeneration;
   const p=state.playback;
-  if(!p?.track){state.status='متصل؛ شغّل أغنية في Spotify';state.lyrics=null;broadcast();return;}
-  const controller=new AbortController();lyricRequest=controller;state.status='جارٍ البحث عن الكلمات…';broadcast();
+  if(!p?.track){state.status='Connected; play a song in Spotify';state.lyrics=null;broadcast();return;}
+  const controller=new AbortController();lyricRequest=controller;state.status='Finding lyrics…';broadcast();
   try {
     const lyrics=await lyricsStore.find(p.track,controller.signal,state.settings.onlineLyrics,refresh);
     if(generation!==requestGeneration||controller.signal.aborted)return;
     const changedText=JSON.stringify(state.lyrics?.lines.map(l=>l.text))!==JSON.stringify(lyrics?.lines.map(l=>l.text));
     if(changedText){translationRequest?.abort();translationGeneration++;state.translations=[];}
     state.lyrics=lyrics;
-    state.status=!lyrics?'لا توجد كلمات مطابقة؛ يمكنك استيراد ملف':lyrics.kind==='plain'?'كلمات غير متزامنة؛ اختر السطر من الإعدادات':lyrics.kind==='instrumental'?'مقطوعة موسيقية بلا كلمات':`${lyrics.source} · ${lyrics.kind==='word'?'توقيت الكلمات':'متزامنة بالسطور'}`;
+    state.status=!lyrics?'No matching lyrics; import a local file':lyrics.kind==='plain'?'Unsynced lyrics; select a line in settings':lyrics.kind==='instrumental'?'Instrumental · no lyrics':`${lyrics.source} · ${lyrics.kind==='word'?'Word-synced':'Line-synced'}`;
     if(lyrics&&state.settings.showTranslation){
       const cached=await translator.cached(p.track,lyrics,state.settings);
       if(generation!==requestGeneration||controller.signal.aborted)return;
-      if(cached){state.translations=cached;state.translationStatus='الترجمة المحفوظة جاهزة';}
+      if(cached){state.translations=cached;state.translationStatus='Cached translation ready';}
     }
   } catch {
     if(generation!==requestGeneration||controller.signal.aborted)return;
-    state.status='تعذّر الوصول لمزوّد الكلمات؛ أعد البحث أو استورد ملفًا';state.lyrics=null;
+    state.status='Lyrics provider unavailable; retry or import a file';state.lyrics=null;
   }
   broadcast();
 }
@@ -259,7 +272,7 @@ function installIpc() {
   });
   ipcMain.handle('translation-key',async(e,value:unknown)=>{
     authorize(e,'settings');const key=z.string().max(500).parse(value).trim();
-    if(key&&!safeStorage.isEncryptionAvailable())throw new Error('تعذّر الوصول إلى تشفير Windows؛ لن يُحفظ المفتاح كنص مكشوف.');
+    if(key&&!safeStorage.isEncryptionAvailable())throw new Error('Windows encryption is unavailable. The key cannot be saved securely.');
     await atomicJson(join(app.getPath('userData'),'secrets.json'),key?{gemini:safeStorage.encryptString(key).toString('base64')}:{});
     translationKey=key;state.translationKeySet=!!key;broadcast();
   });
@@ -290,14 +303,14 @@ function installIpc() {
     if(action==='resetPosition')await patchSettings({x:null,y:null});
     if(action==='refresh')await loadLyrics(true);
     if(action==='install')return installExtension();
-    if(action==='savePosition'&&overlay){const bounds=overlay.getBounds();await patchSettings({savedPosition:{...bounds,monitor:String(screen.getDisplayMatching(bounds).id)}});return 'حُفظ الموضع؛ استخدم اختصار الموضع لإظهار الكلمات هنا.';}
+    if(action==='savePosition'&&overlay){const bounds=overlay.getBounds();await patchSettings({savedPosition:{...bounds,monitor:String(screen.getDisplayMatching(bounds).id)}});return 'Position saved. Use your position shortcut to show lyrics here.';}
     if(action==='restorePosition')await restorePosition();
     if(action==='place'){
       const placement=z.enum(['top','center','bottom']).parse(option),area=displayFor(state.settings).workArea,s=state.settings;
       await patchSettings({x:Math.round(area.x+(area.width-s.width)/2),y:placement==='top'?area.y+24:placement==='bottom'?area.y+area.height-s.height-36:Math.round(area.y+(area.height-s.height)/2),visible:true});
     }
     if(action==='translate'){void translateCurrent();return null;}
-    if(action==='cancelTranslation'){translationRequest?.abort();translationGeneration++;state.translationStatus='أُوقفت الترجمة';broadcast();}
+    if(action==='cancelTranslation'){translationRequest?.abort();translationGeneration++;state.translationStatus='Translation stopped';broadcast();}
     if(action==='openLink'){
       const key=z.enum(['website','github','x','instagram','email','repository','releases','geminiKey']).parse(option);await shell.openExternal(developer.links[key]);
     }
@@ -318,10 +331,10 @@ function installIpc() {
   });
 }
 async function installExtension():Promise<string> {
-  if(state.connectionPhase==='installing')return 'جارٍ تجهيز الاتصال…';
-  state.connectionPhase='installing';state.setupStatus='تجهيز الإضافة والاتصال المحلي…';broadcast();
+  if(state.connectionPhase==='installing')return 'Preparing connection…';
+  state.connectionPhase='installing';state.setupStatus='Preparing the extension and local connection…';broadcast();
   try{
-  if(!bridge?.listening)throw new Error('الخدمة المحلية غير متاحة. أغلق النسخ الأخرى من التطبيق ثم أعد تشغيله.');
+  if(!bridge?.listening)throw new Error('Local service unavailable. Close other copies and restart.');
   const source=app.isPackaged?join(process.resourcesPath,'lyrics-overlay.js'):join(__dirname,'extension/lyrics-overlay.js');
   let configDir:string;
   try {configDir=(await run('spicetify',['-c'],{windowsHide:true,timeout:10000})).stdout.trim();}
@@ -331,29 +344,29 @@ async function installExtension():Promise<string> {
   if(!isAbsolute(configDir)||!configDir.endsWith('.ini'))throw new Error('Could not locate the Spicetify config file. Use scripts/install-extension.ps1.');
   const folder=join(dirname(configDir),'Extensions');await mkdir(folder,{recursive:true});
   const original=await readFile(source,'utf8');
-  if(!original.includes('__LYRICS_OVERLAY_LOCAL_TOKEN__'))throw new Error('ملف الإضافة لا يطابق إصدار التطبيق. نزّل أحدث نسخة.');
+  if(!original.includes('__LYRICS_OVERLAY_LOCAL_TOKEN__'))throw new Error('The extension does not match this app. Download the latest release.');
   const token=await bridge.provision();
   await writeFile(join(folder,'lyrics-overlay.js'),original.replace('__LYRICS_OVERLAY_LOCAL_TOKEN__',token),{mode:0o600});
   await run('spicetify',['config','extensions','lyrics-overlay.js'],{windowsHide:true,timeout:10000});
-  state.setupStatus='تطبيق الإضافة على Spotify؛ قد يُعاد تشغيله…';broadcast();
+  state.setupStatus='Applying to Spotify; Spotify may restart…';broadcast();
   await run('spicetify',['apply'],{windowsHide:true,timeout:60000,maxBuffer:1024*1024});
-  if(!state.connected){state.connectionPhase='waiting';state.setupStatus='الإضافة جاهزة؛ افتح Spotify وسيتم الربط تلقائيًا.';}
-  broadcast();return state.connected?'تم الاتصال بـ Spotify بنجاح.':'الإضافة جاهزة. افتح Spotify ليكتمل الاتصال تلقائيًا.';
-  }catch(error){state.connectionPhase='error';state.setupStatus=error instanceof Error?error.message:'تعذّر تجهيز Spotify';broadcast();throw error;}
+  if(!state.connected){state.connectionPhase='waiting';state.setupStatus='Extension ready. Open Spotify to connect automatically.';}
+  broadcast();return state.connected?'Spotify connected successfully.':'Extension ready. Open Spotify to connect.';
+  }catch(error){state.connectionPhase='error';state.setupStatus=error instanceof Error?error.message:'Could not set up Spotify';broadcast();throw error;}
 }
 async function translateCurrent(){
   const track=state.playback?.track,lyrics=state.lyrics;
-  if(!track||!lyrics?.lines.length){state.translationStatus='شغّل أغنية مع كلمات أولًا';broadcast();return;}
+  if(!track||!lyrics?.lines.length){state.translationStatus='Play a song with lyrics first';broadcast();return;}
   translationRequest?.abort();const generation=++translationGeneration,controller=new AbortController();translationRequest=controller;
-  state.translationStatus='جارٍ تجهيز الترجمة…';broadcast();
+  state.translationStatus='Preparing translation…';broadcast();
   try{
     await patchSettings({showTranslation:true});
     const lines=await translator.translate(track,lyrics,state.settings,translationKey,controller.signal,(lines,done,total)=>{
       if(generation!==translationGeneration||controller.signal.aborted)return;
-      state.translations=lines;state.translationStatus=`جارٍ الترجمة · ${done} / ${total}`;broadcast();
+      state.translations=lines;state.translationStatus=`Translating · ${done} / ${total}`;broadcast();
     });
     if(generation!==translationGeneration||controller.signal.aborted)return;
-    state.translations=lines;state.translationStatus='الترجمة جاهزة ومحفوظة لهذه الأغنية';
-  }catch(error){if(generation!==translationGeneration||controller.signal.aborted)return;state.translationStatus=error instanceof Error?error.message:'تعذّرت الترجمة';}
+    state.translations=lines;state.translationStatus='Translation ready and cached for this song';
+  }catch(error){if(generation!==translationGeneration||controller.signal.aborted)return;state.translationStatus=error instanceof Error?error.message:'Translation failed';}
   broadcast();
 }

@@ -31,6 +31,21 @@ try {
     $taskExecutable = Join-Path $taskDestination 'Spicetify Lyrics Overlay.exe'
     $taskInstalledMarker = Join-Path $taskDestination '.release-sha256'
     $taskAlreadyInstalled = (Test-Path -LiteralPath $taskExecutable) -and (Test-Path -LiteralPath $taskInstalledMarker) -and ((Get-Content -LiteralPath $taskInstalledMarker -Raw).Trim() -eq $taskExpectedHash)
+    # After the download is verified, close only this installer's managed companion.
+    # Older companions keep running in the tray when their settings window closes.
+    $taskManagedProcesses = @(Get-CimInstance Win32_Process -Filter "Name = 'Spicetify Lyrics Overlay.exe'" | Where-Object {
+        $_.ExecutablePath -and $_.ExecutablePath.StartsWith($taskInstallRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -and
+        $_.CommandLine -notmatch '--type=' -and (-not $taskAlreadyInstalled -or $_.ExecutablePath -ne $taskExecutable)
+    })
+    foreach ($taskManagedProcess in $taskManagedProcesses) {
+        $taskExistingVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($taskManagedProcess.ExecutablePath).ProductVersion
+        if ($taskExistingVersion -match '^2\.[1-9]\d*\.') {
+            Start-Process -FilePath $taskManagedProcess.ExecutablePath -ArgumentList '--quit' -WindowStyle Hidden
+            Wait-Process -Id $taskManagedProcess.ProcessId -Timeout 4 -ErrorAction SilentlyContinue
+        }
+        $taskStillRunning = Get-CimInstance Win32_Process -Filter "ProcessId = $($taskManagedProcess.ProcessId)" -ErrorAction SilentlyContinue
+        if ($taskStillRunning -and $taskStillRunning.ExecutablePath -eq $taskManagedProcess.ExecutablePath) { Stop-Process -Id $taskManagedProcess.ProcessId }
+    }
     if (-not $taskAlreadyInstalled) {
         Expand-Archive -LiteralPath $taskZipPath -DestinationPath $taskDestination -Force
         Set-Content -LiteralPath $taskInstalledMarker -Value $taskExpectedHash -Encoding ascii
