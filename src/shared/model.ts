@@ -1,0 +1,71 @@
+import { z } from 'zod';
+
+export const PORT = 43827;
+export const PROTOCOL = 1;
+export const trackSchema = z.object({
+  uri: z.string().min(1).max(500), title: z.string().min(1).max(500),
+  artist: z.string().min(1).max(500), album: z.string().max(500),
+  durationMs: z.number().finite().min(0).max(86_400_000)
+});
+export type Track = z.infer<typeof trackSchema>;
+export const playbackSchema = z.object({
+  type: z.literal('playback'), protocol: z.literal(PROTOCOL), seq: z.number().int().nonnegative(),
+  revision: z.string().min(1).max(600), track: trackSchema.nullable(),
+  positionMs: z.number().finite().min(0).max(86_400_000), playing: z.boolean()
+});
+export type Playback = z.infer<typeof playbackSchema>;
+export const messageSchema = z.discriminatedUnion('type', [
+  z.object({type: z.literal('auth'), protocol: z.literal(PROTOCOL), token: z.string().max(128).optional(), code: z.string().regex(/^\d{8}$/).optional()}),
+  playbackSchema,
+  z.object({type: z.literal('command'), action: z.enum(['toggle', 'settings'])})
+]);
+export type Word = { startMs: number; endMs: number; from: number; to: number };
+export type LyricLine = { startMs: number; endMs: number; text: string; words?: Word[] };
+export type Lyrics = { kind: 'synced' | 'word' | 'plain' | 'instrumental'; lines: LyricLine[]; source: string; fetchedAt: number };
+export const settingsSchema = z.object({
+  visible: z.boolean().default(true), monitor: z.string().max(100).default('primary'),
+  x: z.number().finite().nullable().default(null), y: z.number().finite().nullable().default(null),
+  width: z.number().int().min(240).max(2400).default(680), height: z.number().int().min(40).max(600).default(116),
+  font: z.enum(['auto', 'Inter', 'Cairo', 'Noto Sans JP', 'Segoe UI']).default('auto'),
+  fontSize: z.number().min(12).max(80).default(24), fontWeight: z.number().int().min(300).max(900).default(500),
+  color: z.string().regex(/^#[\da-f]{6}$/i).default('#f5f5f7'), highlight: z.string().regex(/^#[\da-f]{6}$/i).default('#b8ffd5'),
+  opacity: z.number().min(.1).max(1).default(1), shadow: z.number().min(0).max(20).default(3), glow: z.number().min(0).max(30).default(0),
+  border: z.boolean().default(false), borderWidth: z.number().min(0).max(6).default(1), radius: z.number().min(0).max(60).default(0),
+  glass: z.boolean().default(false), align: z.enum(['left', 'center', 'right']).default('center'),
+  vertical: z.enum(['top', 'center', 'bottom']).default('center'), lines: z.enum(['one', 'two']).default('one'),
+  direction: z.enum(['auto', 'rtl', 'ltr']).default('auto'),
+  preset: z.enum(['slide', 'fade', 'karaoke', 'minimal', 'dynamic']).default('slide'),
+  entranceMs: z.number().min(0).max(2000).default(360), exitMs: z.number().min(0).max(1000).default(100),
+  holdMs: z.number().min(0).max(1000).default(0), reducedMotion: z.boolean().default(false),
+  offsetMs: z.number().int().min(-30000).max(30000).default(0), autoStart: z.boolean().default(false),
+  onlineLyrics: z.boolean().default(true),
+  showNext: z.boolean().default(true), nextOpacity: z.number().min(.1).max(.8).default(.38),
+  showTranslation: z.boolean().default(false), translationProvider: z.enum(['gemini','ollama','mymemory']).default('gemini'),
+  translationTarget: z.enum(['ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('ar'),
+  translationSource: z.enum(['auto','ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('auto'),
+  translationModel: z.string().min(1).max(120).default('gemini-3.8-flash'),
+  ollamaUrl: z.string().url().max(300).default('http://127.0.0.1:11434'),
+  savedPosition: z.object({x:z.number().finite(),y:z.number().finite(),width:z.number().int().min(240).max(2400),height:z.number().int().min(40).max(600),monitor:z.string().max(100)}).nullable().default(null),
+  visibilityShortcut: z.string().min(1).max(100).default('Control+Alt+L'), editShortcut: z.string().min(1).max(100).default('Control+Alt+E'),
+  positionShortcut: z.string().min(1).max(100).default('Control+Alt+P')
+});
+export type Settings = z.infer<typeof settingsSchema>;
+export const defaults = settingsSchema.parse({});
+export type AppState = {
+  settings: Settings; connected: boolean; playback: Playback | null; lyrics: Lyrics | null;
+  status: string; edit: boolean; warnings: string[]; trackOffsetMs: number; plainIndex: number;
+  setupStatus: string; connectionPhase: 'idle'|'installing'|'waiting'|'connected'|'error';
+  translations: string[]; translationStatus: string; translationKeySet: boolean;
+};
+export type DisplayInfo = { id: string; label: string };
+export interface OverlayAPI {
+  getState(): Promise<AppState>;
+  subscribe(callback: (state: AppState) => void): () => void;
+  updateSettings(patch: Partial<Settings>): Promise<void>;
+  action(action: 'toggle' | 'edit' | 'settings' | 'pair' | 'import' | 'clearImport' | 'refresh' | 'install' | 'resetPosition' | 'resetPairing' | 'selectPlain' | 'savePosition' | 'restorePosition' | 'place' | 'translate' | 'cancelTranslation' | 'openLink', option?: string): Promise<string | null>;
+  displays(): Promise<DisplayInfo[]>;
+  setTrackOffset(ms: number): Promise<void>;
+  resize(active: boolean): Promise<void>;
+  setTranslationKey(key: string): Promise<void>;
+}
+declare global { interface Window { overlay: OverlayAPI } }

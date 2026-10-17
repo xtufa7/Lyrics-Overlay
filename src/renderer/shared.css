@@ -1,0 +1,11 @@
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/inter/latin-700.css';
+@import '@fontsource/cairo/arabic-400.css';
+@import '@fontsource/cairo/arabic-500.css';
+@import '@fontsource/cairo/arabic-600.css';
+@import '@fontsource/cairo/arabic-700.css';
+@import '@fontsource/noto-sans-jp/400.css';
+@import '@fontsource/noto-sans-jp/500.css';
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid #b8ffd5;outline-offset:3px}.lyric-host{width:100%;height:100%;padding:3px 16px;display:flex;flex-direction:column;overflow:hidden;position:relative}.lyric-block{position:relative;width:100%;min-height:0;flex-shrink:0;line-height:1.65;unicode-bidi:plaintext}.lyric-text,.lyric-highlight{white-space:pre;overflow:hidden;text-overflow:ellipsis;unicode-bidi:plaintext}.lyric-highlight{position:absolute;inset:0;pointer-events:none;text-shadow:none}.two-lines .lyric-text,.two-lines .lyric-highlight{white-space:pre-wrap;overflow-wrap:anywhere;max-height:3.3em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
