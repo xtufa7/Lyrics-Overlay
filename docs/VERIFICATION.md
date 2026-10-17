@@ -13,7 +13,7 @@
 - MyMemory's real HTTPS endpoint was checked with a short non-lyrical test phrase. Gemini/Ollama adapters have deterministic protocol tests; no personal Gemini API key or installed Ollama model was available for live AI quality evaluation. Translation quality is not claimed to be perfect.
 - Dependency audit reported zero known vulnerabilities at verification time.
 
-Final packaged/release verification is appended after the final distribution build. A successful build or audit is not a claim that every Windows configuration has been certified.
+The final NSIS installer and portable ZIP were built successfully. The packaged executable passed the same 34 Electron checks, including authenticated shutdown, with zero main-process or renderer exceptions. SHA256SUMS.txt accompanies the downloadable binaries. A successful build or audit is not a claim that every Windows configuration has been certified.
 
 ## Manual limits
 
