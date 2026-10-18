@@ -12,15 +12,15 @@
 
 **Wrong Arabic direction:** choose automatic direction or force RTL. Each line uses its first strong letter; an English-leading mixed sentence starts LTR by design. Choose Cairo or Automatic for Arabic. The complete line remains shaped; text is not broken into glyph spans.
 
-**Overlay appears missing:** enable it in the tray menu and reset its position. Choose a connected display. A removed/rescaled monitor is handled by clamping bounds to an available work area. One line is truncated with ellipsis when too wide; increase width, reduce font size, or select two lines and increase height. Completely transparent empty lyrics have nothing to show.
+**Overlay appears missing:** enable it in the tray menu and reset its position. Choose a connected display. A removed/rescaled monitor is handled by clamping bounds to an available work area. Enable Fit long lines to shrink a single line, or increase the width, reduce the font size, or select two lines and increase height. Completely transparent empty lyrics have nothing to show.
 
 **Clicks are blocked:** finish Edit Mode with Done, Escape or the configured shortcut. Normal mode ignores mouse input and disables focus. If a shortcut is occupied, an available alternative is selected and displayed in Position & shortcuts; click its field and press a new combination to customize it. Save the current position on Home to restore it with the position shortcut.
 
 **Overlay hidden by a game or protected app:** exclusive-fullscreen, secure desktops, anti-cheat and protected video may prevent overlays. Try the application's ordinary borderless-windowed mode. This app does not inject into games or bypass protections.
 
-**No rectangle/background:** this is intentional. Version 2 always renders frameless transparent lyrics; old border/glass settings are ignored. The preview's surrounding settings card is not part of the actual desktop overlay.
+**Choose a background:** Appearance → Overlay style offers Text only, Floating card, Liquid glass and Hanging sign. Text only is transparent by default. Other styles expose panel tint, opacity, corners and border controls. Glass is a visual finish; native blur behind the desktop window depends on the compositor.
 
-**No translation:** enable the header Translation switch and explicitly press Translate song under Translation. Automatic translates Arabic lines into English and other lines into Arabic; select a language to override it. Gemini requires your own valid key and available model; provider limits/billing apply. Ollama requires a running local server and installed model. MyMemory is a basic limited fallback. A saved result returns for matching lyrics/provider/language/model/style. Appearance changes do not require retranslating. Translation never changes word timing.
+**No translation:** enable the header Translation switch and explicitly press Translate song under Translation. Automatic translates Arabic lines into English and other lines into Arabic; select a language to override it. Auto uses Gemini if you saved a key, otherwise MyMemory, and can fall back if Gemini fails. Explicit Gemini requires your valid key and an available model; provider limits/billing apply. Ollama requires a running local server and installed model. MyMemory is a basic limited fallback. A saved result returns for matching lyrics/provider/language/model/style. Appearance changes do not require retranslating. Translation never changes word timing.
 
 **No album cover:** use Repair connection after updating so Spotify receives the matching extension. Only Spotify's image host is accepted. Local tracks without supported artwork use the music placeholder. Show album cover independently controls the desktop image.
 
