@@ -1,19 +1,19 @@
-# Verification — 2.1.0
+# Verification — 2.2.0
 
-17 October 2026 · Windows 11 x64 build 26200 · Electron 44.9.0 · Spicetify 2.45.3.
+18 October 2026 · Windows 11 x64 build 26200 · Electron 44.9.0 · Spicetify 2.45.3.
 
 ## Completed
 
 - TypeScript validation and application/extension build pass.
-- **27 engine/protocol tests pass**: schemas, Spicetify snapshots, unpaired behavior, stale sequence rejection, origin/auth/revocation, LRC/TTML parsing and ranges, strict version/metadata matching, provider fallback/cache/import priority, cancellation, monotonic pause/seek/end recovery, Unicode directions, upcoming cue selection, translation ID validation, local endpoint restrictions, contextual AI request construction and translation caching.
-- **47 real Electron checks pass**: native window geometry, always-on-top/non-focusability, renderer sandbox/role restrictions, authenticated WebSocket, Arabic right-origin/English left-origin animation, Japanese and mixed text, real-timing karaoke/pause, current plus next sentence, permanently frameless rendering despite legacy border settings, saved-position restoration plus visibility, edit mode, partial settings, per-track offset, encrypted key state redaction, developer attribution, rapid tracks, disconnect, restart persistence and token reconnection. A local Ollama-protocol fixture also verified translation appearing on the actual overlay and restoration from cache after restart. Quitting with an authenticated socket now closes cleanly, with no destroyed-tray/main-process exceptions or renderer/CSP errors. Screenshots use original fixture phrases.
+- **30 engine/protocol tests pass**: schemas, Spicetify snapshots, unpaired behavior, stale sequence rejection, origin/auth/revocation, LRC/TTML parsing and ranges, strict version/metadata matching, provider fallback/cache/import priority, cancellation, monotonic pause/seek/end recovery, Unicode directions, upcoming cue selection, translation ID validation, local endpoint restrictions, contextual AI request construction and translation caching.
+- **63 real Electron checks pass**: native window geometry, always-on-top/non-focusability, renderer sandbox/role restrictions, authenticated WebSocket, Arabic right-origin/English left-origin animation, Japanese and mixed text, real-timing karaoke/pause, current plus next sentence, permanently frameless rendering despite legacy border settings, saved-position restoration plus visibility, edit mode, partial settings, per-track offset, encrypted key state redaction, developer attribution, rapid tracks, disconnect, restart persistence and token reconnection. A local Ollama-protocol fixture also verified translation appearing on the actual overlay and restoration from cache after restart. Quitting with an authenticated socket now closes cleanly, with no destroyed-tray/main-process exceptions or renderer/CSP errors. Screenshots use original fixture phrases.
 - **Real installed Spotify connection verified** after one-click setup, without manual pairing: actual playback events arrived and LRCLIB supplied **93 synchronized lines** for the real track. Personal track metadata and full lyric text are intentionally excluded from public artifacts. This is distinct from fixture-based protocol tests.
 - A native Windows click-through check delivered actual Windows mouse input through the transparent Arabic overlay to a separate underlying window. The check used the computer-use `@oai/sky` API rather than a DOM-synthesized click.
 - The previous installed 1.0.0 application was removed through its registered uninstaller. Its executable and uninstall entry were verified absent. Project source and a local settings backup were retained.
 - MyMemory's real HTTPS endpoint was checked with a short non-lyrical test phrase. Gemini/Ollama adapters have deterministic protocol tests; no personal Gemini API key or installed Ollama model was available for live AI quality evaluation. Translation quality is not claimed to be perfect.
 - Dependency audit reported zero known vulnerabilities at verification time.
 
-The final NSIS installer and portable ZIP were built successfully. The packaged executable passed the same 47 Electron checks, including authenticated shutdown, with zero main-process or renderer exceptions. SHA256SUMS.txt accompanies the downloadable binaries. A successful build or audit is not a claim that every Windows configuration has been certified.
+The final NSIS installer and portable ZIP were built successfully. The packaged executable passed the same 63 Electron checks, including authenticated shutdown, with zero main-process or renderer exceptions. SHA256SUMS.txt accompanies the downloadable binaries. A successful build or audit is not a claim that every Windows configuration has been certified.
 
 ## Manual limits
 
@@ -28,3 +28,7 @@ To reproduce: `npm run check`, `npm run test:desktop`, `npm run dist`, then `npm
 English/LTR interface, five themes with actual color changes, compact About and artwork, constrained Spotify cover URLs, optional cover display, estimated current-word movement and pause, exact-only behavior, independent translation colors/glow/position, immediate translation hiding/restoration, circular tour skipping/persistence, automatic bidirectional target selection and style-specific translation caches are covered.
 
 A native screenshot verified the updated extension delivering real Spotify artwork, current/next lyrics and moving word indication. No personal lyric capture is published. The extension bundle is 4,522 bytes before local credential provisioning. Visual estimates never modify source timestamps and are clearly labeled.
+
+## 2.2 additions
+
+The desktop suite additionally checks bundled font selection, all four surfaces, long-line fitting, natural cue-boundary transitions, complete named setup restoration, secret-free settings export/import, actual GitHub avatar, creator-credit toggle, brief disconnect retention, token reconnect and setup persistence after restart. New engine checks cover tolerant settings recovery, safe reprovisioning and current-line-first keyless translation. Public screenshots use an isolated profile and original demonstration text.

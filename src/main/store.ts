@@ -21,6 +21,13 @@ export class SettingsStore {
     // Recover individual valid fields if a hand-edited settings file contains one invalid entry.
     const full = settingsSchema.safeParse(raw);
     this.value = full.success ? full.data : {...defaults};
+    if(!full.success&&raw&&typeof raw==='object'){
+      for(const [key,schema] of Object.entries(settingsSchema.shape)){
+        if(!Object.hasOwn(raw,key))continue;
+        const field=schema.safeParse((raw as Record<string,unknown>)[key]);
+        if(field.success)(this.value as Record<string,unknown>)[key]=field.data;
+      }
+    }
   }
   async save(patch: Partial<Settings>) {
     const value = settingsSchema.parse({...this.value, ...patch});

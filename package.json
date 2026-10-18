@@ -1,6 +1,6 @@
 {
   "name": "spicetify-lyrics-overlay",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "A transparent, language-aware Windows lyrics companion for Spicetify",
   "author": {
     "name": "Nour Al-Shammari (0xTuFa7)",
@@ -34,9 +34,13 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@fontsource/inter": "^5.2.8",
     "@fontsource/cairo": "^5.2.6",
+    "@fontsource/inter": "^5.2.8",
+    "@fontsource/manrope": "^5.3.0",
     "@fontsource/noto-sans-jp": "^5.2.8",
+    "@fontsource/outfit": "^5.3.0",
+    "@fontsource/rubik": "^5.3.0",
+    "@fontsource/tajawal": "^5.3.0",
     "@playwright/test": "^1.58.2",
     "@types/node": "^24.10.0",
     "@types/ws": "^8.18.1",

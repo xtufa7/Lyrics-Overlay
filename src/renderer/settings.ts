@@ -5,6 +5,8 @@ import {PlaybackClock,lineAt,followingLine,directionOf,fontFor} from '../shared/
 import {defaults,type Settings,type AppState,type LyricLine,type OverlayAPI} from '../shared/model';
 import {developer} from '../shared/developer';
 import {startTour} from './tour';
+import './surface.css';
+import {configureSurface} from './surface';
 
 const $=<T extends HTMLElement=HTMLElement>(selector:string)=>document.querySelector<T>(selector)!;
 const iconPaths:Record<string,string>={
@@ -34,6 +36,7 @@ let tourStarted=false;
 const languages:[string,string][]=[['ar','Arabic'],['en','English'],['fa','Persian'],['ur','Urdu'],['he','Hebrew'],['ja','Japanese'],['ko','Korean'],['zh','Chinese'],['fr','French'],['es','Spanish'],['de','German'],['tr','Turkish']];
 type Spec={key:keyof Settings;label:string;type:'range'|'select'|'number'|'color'|'checkbox'|'text'|'shortcut';min?:number;max?:number;step?:number;unit?:string;options?:[string,string][]};
 const specs:Record<string,Spec[]>={
+ panel:[{key:'surfaceColor',label:'Panel color',type:'color'},{key:'surfaceOpacity',label:'Panel opacity',type:'range',min:.1,max:1,step:.05},{key:'surfaceRadius',label:'Corner radius',type:'range',min:0,max:60,step:1,unit:'px'},{key:'surfaceBorder',label:'Edge color',type:'color'}],
  highlight:[{key:'wordHighlight',label:'Word highlight',type:'select',options:[['word','Current word'],['sweep','Progressive sweep'],['off','Off']]},{key:'wordTiming',label:'Word timing',type:'select',options:[['estimate','Estimate when needed'],['exact','Exact timestamps only']]},{key:'wordUnderline',label:'Moving underline',type:'checkbox'}],
  'translation-look':[{key:'translationFont',label:'Translation font',type:'select',options:[['auto','Automatic by language'],['Inter','Inter'],['Cairo','Cairo'],['Noto Sans JP','Noto Sans JP'],['Segoe UI','Segoe UI']]},{key:'translationSize',label:'Size relative to original',type:'range',min:.5,max:1.2,step:.05},{key:'translationColor',label:'Translation color',type:'color'},{key:'translationOpacity',label:'Translation opacity',type:'range',min:.2,max:1,step:.05},{key:'translationPlacement',label:'Translation position',type:'select',options:[['below','Below original'],['above','Above original']]}],
  typography:[{key:'font',label:'Font',type:'select',options:[['auto','Automatic by language'],['Cairo','Cairo · Arabic'],['Inter','Inter'],['Noto Sans JP','Noto Sans JP · Japanese'],['Segoe UI','Segoe UI']]},{key:'fontWeight',label:'Font weight',type:'select',options:[['400','Regular'],['500','Medium'],['600','Semibold'],['700','Bold']]},{key:'fontSize',label:'Lyric size',type:'range',min:12,max:80,step:1,unit:'px'},{key:'lines',label:'Long lines',type:'select',options:[['one','One line'],['two','Wrap to two lines']]},{key:'color',label:'Text color',type:'color'},{key:'highlight',label:'Highlight color',type:'color'}],
@@ -47,6 +50,13 @@ const specs:Record<string,Spec[]>={
  lyrics:[{key:'onlineLyrics',label:'Find lyrics with LRCLIB',type:'checkbox'},{key:'offsetMs',label:'Global lyric offset',type:'number',min:-30000,max:30000,step:50,unit:'ms'}]
 };
 specs.translation![0]!.options=[['auto','Automatic · Arabic ↔ English'],...languages];
+const fonts:[string,string][]=[['auto','Automatic by language'],['Manrope','Manrope · clean'],['Outfit','Outfit · rounded'],['Rubik','Rubik · friendly'],['Tajawal','Tajawal · Arabic'],['Inter','Inter'],['Cairo','Cairo · Arabic'],['Noto Sans JP','Noto Sans JP'],['Segoe UI','Segoe UI · system'],['Georgia','Georgia · serif'],['Arial','Arial'],['Verdana','Verdana'],['Consolas','Consolas · mono']];
+specs.typography![0]!.options=fonts;specs['translation-look']![0]!.options=fonts;
+specs.typography!.push({key:'autoFit',label:'Fit long lines automatically',type:'checkbox'});
+specs.motion!.unshift({key:'lineTransition',label:'Line transition',type:'select',options:[['rise','Rise'],['slide','Slide'],['crossfade','Crossfade'],['blur','Soft blur'],['zoom','Zoom'],['none','None']]});
+specs.motion!.push({key:'respectSystemMotion',label:'Follow Windows reduced motion',type:'checkbox'});
+specs.highlight!.push({key:'wordAnimation',label:'Live word effect',type:'select',options:[['glow','Glow'],['pulse','Pulse'],['bounce','Float'],['none','None']]});
+specs.surface!.push({key:'glowColor',label:'Glow color',type:'color'});
 specs.language!.push({key:'showArtwork',label:'Show album cover',type:'checkbox'});
 specs['translation-look']!.push({key:'translationGlow',label:'Translation glow',type:'range',min:0,max:24,step:1,unit:'px'});
 function prettyShortcut(value:string){return value.replace(/Control/g,'Ctrl').replace(/\+/g,' + ');}
@@ -87,8 +97,9 @@ for(const [group,items] of Object.entries(specs)){
  }
 }
 for(const [id,name,description] of [['slide','move','Slide'],['fade','fade','Fade'],['karaoke','wave','Karaoke'],['minimal','minimal','Minimal'],['dynamic','dynamic','Dynamic']] as const){
- const b=document.createElement('button');b.className='preset';b.dataset.preset=id;b.innerHTML=icon(name);const label=document.createElement('span');label.textContent=description;b.append(label);b.onclick=()=>{void save({preset:id}).then(replay);};$('#presets').append(b);
+ const b=document.createElement('button');b.className='preset';b.dataset.preset=id;b.innerHTML=icon(name);const label=document.createElement('span');label.textContent=description;b.append(label);b.onclick=()=>{const transition={slide:'slide',fade:'crossfade',karaoke:'rise',minimal:'none',dynamic:'zoom'}[id] as Settings['lineTransition'];void save({preset:id,lineTransition:transition}).then(replay);};$('#presets').append(b);
 }
+for(const [id,label,caption] of [['text','Text only','Nothing around your lyrics'],['pill','Floating card','Soft, rounded and quiet'],['glass','Liquid glass','A subtle glass finish'],['sign','Hanging sign','A little sign for your music']] as const){const b=document.createElement('button');b.className='surface-option';b.dataset.surface=id;b.innerHTML=`<span class="surface-sample surface-${id}">Aa</span>`;const strong=document.createElement('strong');strong.textContent=label;const small=document.createElement('small');small.textContent=caption;b.append(strong,small);b.onclick=()=>void save({surface:id,...id==='sign'?{height:Math.max(132,state.settings.height)}:{}});$('#surfaces').append(b);}
 const themes=[['midnight','Midnight',['#1d1d2d','#bcb5ff','#a5e7d0'],'#bcb5ff'],['graphite','Graphite',['#161719','#727c88','#ecedef'],'#dce3ee'],['ocean','Ocean',['#101e2b','#399ed3','#b5ecff'],'#80cefa'],['forest','Forest',['#15221e','#54836a','#b9e6bf'],'#9bd7ae'],['light','Daylight',['#eeeeF7','#fff','#7a69bd'],'#c5b8ff']] as const;
 for(const [id,label,colors,highlight] of themes){
  const b=document.createElement('button');b.className='theme';b.dataset.theme=id;b.setAttribute('aria-label',`${label} theme`);
@@ -97,15 +108,16 @@ for(const [id,label,colors,highlight] of themes){
 }
 function replay(){previewManual=true;language='en';$<HTMLSelectElement>('#preview-language').value=language;demoStart=performance.now();demoKey='';preview.replay();scheduleFrame();}
 $('#replay-motion').onclick=replay;
-for(const [id,name,caption] of [['gemini','Gemini','Context-aware AI'],['ollama','Ollama','Local AI'],['mymemory','MyMemory','Basic · no API key']] as const){
+for(const [id,name,caption] of [['auto','Auto','Best available'],['gemini','Gemini','Context-aware AI'],['ollama','Ollama','Local AI'],['mymemory','MyMemory','Basic · no API key']] as const){
  const b=document.createElement('button');b.className='provider';b.dataset.provider=id;const title=document.createElement('strong');title.textContent=name;title.dir='ltr';const desc=document.createElement('span');desc.textContent=caption;b.append(title,desc);b.onclick=()=>void save({translationProvider:id,...id==='gemini'?{translationModel:'gemini-3.8-flash'}:id==='ollama'?{translationModel:'qwen3:8b'}:{}});$('#providers').append(b);
 }
-const titles:Record<string,[string,string]>={home:['Your words. Your space.','Lyrics above your apps. Nothing in the way.'],appearance:['Make it yours.','Themes, typography and motion. Preview every change.'],position:['Right where you want it.','Save a position. Bring it back with one shortcut.'],translation:['Meaning, in time.','Tune the translation and how it appears.'],lyrics:['Every line, on time.','Lyric sources, local files and synchronization.'],about:['About','Built by xtufa7. Find me around the web.']};
+const titles:Record<string,[string,string]>={home:['Home','Your lyrics, live.'],appearance:['Appearance','Style, type and motion.'],position:['Position & shortcuts','Your favorite spot. One shortcut away.'],translation:['Translation','Your language. Your style.'],lyrics:['Lyrics & timing','Sources and synchronization.'],profiles:['Saved setups','Keep everything just the way you like it.'],about:['About','Built by xtufa7. Find me around the web.']};
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-tab]'))b.onclick=()=>{
  selectedTab=b.dataset.tab!;for(const el of document.querySelectorAll('[data-tab]'))el.classList.toggle('active',el===b);
  for(const el of document.querySelectorAll('.tab'))el.classList.toggle('active',el.id===`tab-${selectedTab}`);
  $('#page-title').textContent=titles[selectedTab]![0];$('#page-subtitle').textContent=titles[selectedTab]![1];$('.content').scrollTop=0;
  document.body.classList.toggle('about-page',selectedTab==='about');scheduleFrame();
+ document.body.dataset.page=selectedTab;
 };
 async function action(name:Parameters<OverlayAPI['action']>[0],option?:string){try{const response=await window.overlay.action(name,option);if(response)feedback(response);return response;}catch(e){feedback(errorText(e),true);return null;}}
 for(const [selector,name] of [['#toggle','toggle'],['#edit','edit'],['#save-position','savePosition'],['#restore-position','restorePosition'],['#reset-position','resetPosition'],['#refresh','refresh'],['#clear-import','clearImport'],['#reset-pairing','resetPairing'],['#translate','translate'],['#cancel-translation','cancelTranslation']] as const)$(selector).onclick=()=>void action(name);
@@ -116,12 +128,19 @@ $('#install').onclick=()=>void action('install');
 $('#repository').onclick=()=>void action('openLink','repository');$('#get-key').onclick=()=>void action('openLink','geminiKey');
 $('#start-tour').onclick=startTour;
 $('#quick-translation').onclick=()=>void save({showTranslation:!state.settings.showTranslation});
+$('#top-text').onclick=async()=>{await save({surface:'text',showArtwork:false,align:'center',visible:true,width:Math.max(720,state.settings.width)});await action('place','top');await action('savePosition');};
+$('#about-github').onclick=()=>void action('openLink','github');$('#view-license').onclick=()=>void action('openLink','license');
+$('#creator-credits').onchange=()=>void save({showCreatorCredits:$<HTMLInputElement>('#creator-credits').checked});
+$('#save-profile').onclick=async()=>{const name=$<HTMLInputElement>('#profile-name').value.trim();if(!name){feedback('Name your setup first.',true);return;}await action('saveProfile',name);};
+$('#load-profile').onclick=()=>void action('loadProfile',$<HTMLSelectElement>('#profiles').value);
+$('#delete-profile').onclick=()=>void action('deleteProfile',$<HTMLSelectElement>('#profiles').value);
+$('#export-settings').onclick=()=>void action('exportSettings');$('#import-settings').onclick=()=>void action('importSettings');
 $('#save-key').onclick=async()=>{const input=$<HTMLInputElement>('#translation-key');try{await window.overlay.setTranslationKey(input.value);input.value='';feedback('API key saved with Windows encryption.');}catch(e){feedback(errorText(e),true);}};
 $('#clear-key').onclick=async()=>{try{await window.overlay.setTranslationKey('');$<HTMLInputElement>('#translation-key').value='';feedback('Saved API key removed.');}catch(e){feedback(errorText(e),true);}};
 $('#track-offset').addEventListener('change',async()=>{try{await window.overlay.setTrackOffset($<HTMLInputElement>('#track-offset').valueAsNumber);}catch(e){feedback(errorText(e),true);}});
 $('#preview-language').addEventListener('change',()=>{previewManual=true;language=$<HTMLSelectElement>('#preview-language').value;demoStart=performance.now();scheduleFrame();});
 for(const [key,name,symbol] of [['github','GitHub · xtufa7','github'],['website','Website · xtufa7','globe']] as const){
- const b=document.createElement('button');b.dataset.developerLink=key;b.innerHTML=icon(symbol);const span=document.createElement('span');span.textContent=name;b.append(span);b.onclick=()=>void action('openLink',key);$('#developer-links').append(b);
+ const b=document.createElement('button');b.dataset.developerLink=key;const avatar=document.createElement('img');avatar.src=key==='github'?'github-avatar.png':'website-avatar.svg';avatar.alt=key==='github'?'xtufa7 GitHub avatar':'xtufa7 website icon';avatar.width=48;avatar.height=48;const span=document.createElement('span');span.textContent=name;b.append(avatar,span);b.insertAdjacentHTML('beforeend',icon('arrow'));b.onclick=()=>void action('openLink',key);$('#developer-links').append(b);
 }
 window.overlay.displays().then(displays=>{const select=$<HTMLSelectElement>('#setting-monitor');for(const d of displays)select.append(new Option(d.label,d.id));}).catch(()=>{});
 function sizePreview(){const s=state?.settings??defaults,stage=$('#preview-stage'),space=$('#preview-space');stage.style.width=`${s.width}px`;stage.style.height=`${s.height}px`;stage.style.transform=`scale(${Math.min(1,(space.clientWidth-30)/s.width,138/s.height)})`;$('#dimensions').textContent=`${s.width} × ${s.height}`;}
@@ -129,7 +148,13 @@ new ResizeObserver(sizePreview).observe($('#preview-space'));
 function receive(next:AppState){
  const oldSettings=state?.settings;state=next;
  document.documentElement.dataset.theme=next.settings.theme;
- for(const el of document.querySelectorAll<HTMLElement>('[data-theme]')){const selected=el.dataset.theme===next.settings.theme;el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected));}
+ for(const el of document.querySelectorAll<HTMLElement>('button[data-theme]')){const selected=el.dataset.theme===next.settings.theme;el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected));}
+ for(const el of document.querySelectorAll<HTMLElement>('button[data-surface]')){const selected=el.dataset.surface===next.settings.surface;el.classList.toggle('selected',selected);el.setAttribute('aria-pressed',String(selected));}
+ $('#panel-settings').hidden=next.settings.surface==='text';
+ $<HTMLInputElement>('#creator-credits').checked=next.settings.showCreatorCredits;$('#developer-links').hidden=!next.settings.showCreatorCredits;$('.about-copyright').hidden=!next.settings.showCreatorCredits;
+ const profileSelect=$<HTMLSelectElement>('#profiles'),oldProfile=profileSelect.value;
+ if([...profileSelect.options].map(o=>o.value).join('\0')!==next.profiles.join('\0')){profileSelect.replaceChildren(...next.profiles.map(name=>new Option(name,name)));if(next.profiles.includes(oldProfile))profileSelect.value=oldProfile;}
+ $<HTMLButtonElement>('#load-profile').disabled=!next.profiles.length;$<HTMLButtonElement>('#delete-profile').disabled=!next.profiles.length;
  if(!previewManual){language=next.connected?'current':'en';$<HTMLSelectElement>('#preview-language').value=language;}
  if(next.playback?.seq!==lastSeq||next.playback?.revision!==lastRevision){clock.update(next.playback,performance.now());lastSeq=next.playback?.seq??-1;lastRevision=next.playback?.revision??'';}
  for(const [key,value] of Object.entries(next.settings)){
@@ -146,7 +171,7 @@ function receive(next:AppState){
   image.hidden=!src||image.dataset.failed===src;image.onerror=()=>{image.hidden=true;image.dataset.failed=src;};if(src&&image.getAttribute('src')!==src){delete image.dataset.failed;image.src=src;}if(!src)image.removeAttribute('src');
  }
  $('#edit span')!.textContent=next.edit?'Done editing':'Move & resize';
- $('#connection-label').classList.toggle('online',next.connected);$('#connection-text').textContent=next.connected?'Spotify connected':'Spotify disconnected';
+ $('#connection-label').classList.toggle('online',next.connected);$('#connection-text').textContent=next.connected?'Spotify connected':next.playback?'Reconnecting…':'Spotify disconnected';
  $('#connection-badge').textContent=next.connected?'Connected':'Disconnected';$('#connection-badge').classList.toggle('online',next.connected);
  $('#setup-heading').textContent=next.connected?'Connected. Ready to play.':next.connectionPhase==='installing'?'Setting up Spotify…':'Connect your music.';
  $('#setup-status').textContent=next.setupStatus;
@@ -160,16 +185,16 @@ function receive(next:AppState){
  if(document.activeElement!==$('#track-offset'))$<HTMLInputElement>('#track-offset').value=String(next.trackOffsetMs);
  $('#warnings').hidden=!next.warnings.length;$('#warnings').textContent=next.warnings.join('\n');
  $('#key-status').textContent=next.translationKeySet?'Encrypted on this device':'Not added';
- $('#translation-status').textContent=next.translationStatus;
- const provider=next.settings.translationProvider;$('#gemini-secret').hidden=provider!=='gemini';$('#ollama-fields').hidden=provider!=='ollama';
- $('[data-field="translationModel"]').hidden=provider==='mymemory';
- $('[data-field="translationStyle"]').hidden=provider==='mymemory';
+ $('#translation-status').textContent=next.translationStatus;$('#translation-status').classList.toggle('busy',next.translationBusy);
+ const provider=next.settings.translationProvider;$('#gemini-secret').hidden=provider!=='gemini'&&provider!=='auto';$('#ollama-fields').hidden=provider!=='ollama';
+ $('[data-field="translationModel"]').hidden=provider==='mymemory'||provider==='auto'&&!next.translationKeySet;
+ $('[data-field="translationStyle"]').hidden=provider==='mymemory'||provider==='auto'&&!next.translationKeySet;
  $('#timing-note').textContent=next.settings.wordHighlight==='off'?'Only the words. Everything else is transparent.':next.lyrics?.kind==='synced'&&next.settings.wordTiming==='estimate'?'Word motion estimated from line timing':'Real word timing when available';
- $('#provider-note').textContent=provider==='gemini'?'Use a model available to your account. Your own key is required; Google usage limits and billing apply.':provider==='ollama'?'Run Ollama with your chosen model. Local loopback addresses only; no API key required.':'Basic translation with service limits. Choose the source language manually if needed. Use AI for more context.';
- $<HTMLButtonElement>('#translate').disabled=!next.lyrics?.lines.length;
+ $('#provider-note').textContent=provider==='auto'?'Auto uses Gemini when your key is saved, otherwise basic translation. If AI is unavailable, basic translation is the fallback.':provider==='gemini'?'Use a model available to your account. Your own key is required; Google usage limits and billing apply.':provider==='ollama'?'Run Ollama with your chosen model. Local loopback addresses only; no API key required.':'Basic translation with service limits. Choose the source language manually if needed.';
+ $<HTMLButtonElement>('#translate').disabled=!next.lyrics?.lines.length||next.translationBusy;$('#translate span').textContent=next.translationBusy?'Translating…':'Translate song';$<HTMLButtonElement>('#cancel-translation').disabled=!next.translationBusy;
  $('#plain-section').hidden=next.lyrics?.kind!=='plain';const pk=next.lyrics?.kind==='plain'?`${next.lyrics.fetchedAt}:${next.plainIndex}`:'';
  if(pk!==plainKey){plainKey=pk;$('#plain-lines').replaceChildren();if(next.lyrics?.kind==='plain')next.lyrics.lines.forEach((line,i)=>{const b=document.createElement('button');b.textContent=line.text;b.dir='auto';b.classList.toggle('selected',i===next.plainIndex);b.onclick=()=>void action('selectPlain',String(i));$('#plain-lines').append(b);});}
- if(!oldSettings||JSON.stringify(oldSettings)!==JSON.stringify(next.settings)){previewStyleVersion++;preview.configure(next.settings);sizePreview();}
+ if(!oldSettings||JSON.stringify(oldSettings)!==JSON.stringify(next.settings)){previewStyleVersion++;preview.configure(next.settings);configureSurface($('#preview-surface'),next.settings);sizePreview();}
  scheduleFrame();
  if(!tourStarted&&!next.settings.tourComplete){tourStarted=true;setTimeout(startTour,500);}
 }
@@ -186,11 +211,12 @@ function frame(now:number){
   const elapsed=Math.max(0,now-demoStart),current=language==='current',position=current?clock.position(now)+state.settings.offsetMs+state.trackOffsetMs:elapsed%10000;
   const idx=current?(state.lyrics?.kind==='plain'?state.plainIndex:lineAt(state.lyrics?.lines??[],position)):Math.floor(position/5000);
   const key=current?`real:${state.playback?.revision}:${state.lyrics?.fetchedAt}:${idx}`:`demo:${language}:${Math.floor(elapsed/5000)}`;
-  if(key!==demoKey){demoKey=key;if(current)demoLine=state.lyrics?.lines[idx]??null;else{const text=(samples[language]??samples.ar)![idx]!,startMs=idx*5000;let cursor=0;demoLine={text,startMs,endMs:startMs+5000,words:text.split(' ').map((word,i,all)=>{const from=cursor;cursor+=word.length+1;return{from,to:from+word.length,startMs:startMs+400+i*(3600/all.length),endMs:startMs+400+(i+1)*(3600/all.length)};})};}preview.setPaused(false);void preview.show(demoLine,key);}
+  if(key!==demoKey){demoKey=key;if(current)demoLine=state.lyrics?.lines[idx]??null;else{const text=(samples[language]??samples.ar)![idx]!,startMs=idx*5000;let cursor=0;demoLine={text,startMs,endMs:startMs+5000,words:text.split(' ').map((word,i,all)=>{const from=cursor;cursor+=word.length+1;return{from,to:from+word.length,startMs:startMs+400+i*(3600/all.length),endMs:startMs+400+(i+1)*(3600/all.length)};})};}preview.setPaused(current&&!!state.playback&&!state.playback.playing);void preview.show(demoLine,key);}
   preview.setPaused(current&&!!state.playback&&!state.playback.playing);preview.progress(position);
   const translation=current?state.translations[idx]??'':(sampleTranslations[language]??sampleTranslations.ar)![idx]!;
   const auxiliaryKey=[key,translation,previewStyleVersion].join(':');
   if(auxiliaryKey!==previewAuxKey){previewAuxKey=auxiliaryKey;
+  const artwork=$<HTMLImageElement>('#preview-artwork'),src=current?state.playback?.track?.artwork??'':'app-icon.png';artwork.hidden=!state.settings.showArtwork||!src;if(src&&artwork.getAttribute('src')!==src)artwork.src=src;$('#preview-surface').classList.toggle('with-artwork',!artwork.hidden);
   const nextText=current?followingLine(state.lyrics?.lines??[],idx,position)?.text??'':(samples[language]??samples.ar)![(idx+1)%2]!;
   auxiliary($('#preview-next'),state.settings.showNext?nextText:'',state.settings,state.settings.nextOpacity);
   auxiliary($('#preview-translation'),state.settings.showTranslation?translation:'',state.settings,.8);

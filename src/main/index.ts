@@ -10,8 +10,9 @@ import { LocalBridge } from './bridge';
 import { LrclibProvider } from '../lyrics/provider';
 import { parseLrc, parseTtml, plainLyrics } from '../lyrics/parsers';
 import { PORT, settingsSchema, type AppState, type Playback, type Settings } from '../shared/model';
-import {TranslationEngine,localOllamaUrl} from '../lyrics/translation';
+import {TranslationEngine,localOllamaUrl,resolvedTranslation} from '../lyrics/translation';
 import {developer} from '../shared/developer';
+import {lineAt} from '../shared/timing';
 
 const run = promisify(execFile);
 const smoke = process.env.LYRICS_OVERLAY_TEST === '1';
@@ -32,6 +33,8 @@ let writeQueue=Promise.resolve(), geometryTimer:ReturnType<typeof setTimeout>|un
 let resizeTimer:ReturnType<typeof setInterval>|undefined;
 let offsets:Record<string,number>={};
 let translator:TranslationEngine,translationKey='',translationRequest:AbortController|null=null,translationGeneration=0;
+let disconnectTimer:ReturnType<typeof setTimeout>|undefined;
+let profiles:Record<string,Settings>=Object.create(null);
 const root=join(__dirname,'renderer');
 const page=(name:string)=>join(root,`${name}.html`);
 const url=(name:string)=>pathToFileURL(page(name)).href;
@@ -56,6 +59,7 @@ function shutdown() {
   globalShortcut.unregisterAll();
   if(resizeTimer)clearInterval(resizeTimer);
   if(geometryTimer)clearTimeout(geometryTimer);
+  if(disconnectTimer)clearTimeout(disconnectTimer);
   // Socket close events can arrive after native tray/window disposal.
   const currentTray=tray;tray=null;
   if(currentTray&&!currentTray.isDestroyed())currentTray.destroy();
@@ -78,13 +82,16 @@ async function start() {
   if(!migrated){await store.save({border:false,glass:false,height:Math.max(116,store.value.height)});await atomicJson(join(dir,'layout-v2.json'),true);}
   const updated=await readJson(join(dir,'layout-v21.json'),false);
   if(!updated){await store.save({translationTarget:'auto'});await atomicJson(join(dir,'layout-v21.json'),true);}
+  if(!await readJson(join(dir,'layout-v22.json'),false)){await store.save({translationProvider:'auto',lineTransition:'rise',respectSystemMotion:false});await atomicJson(join(dir,'layout-v22.json'),true);}
   if(app.isPackaged&&store.value.autoStart)app.setLoginItemSettings({openAtLogin:true,path:process.execPath,args:['--background']});
   offsets=await readJson(join(dir,'offsets.json'),{});
   lyricsStore=new LyricsStore(dir,[new LrclibProvider()]);await lyricsStore.initialize();
   translator=new TranslationEngine(dir);
+  const savedProfiles=await readJson<Record<string,unknown>>(join(dir,'profiles.json'),{});
+  for(const [name,value] of Object.entries(savedProfiles&&typeof savedProfiles==='object'&&!Array.isArray(savedProfiles)?savedProfiles:{})){const parsed=settingsSchema.safeParse(value);if(parsed.success)Object.defineProperty(profiles,name,{value:parsed.data,writable:true,enumerable:true,configurable:true});}
   const secret=await readJson<{gemini?:string}>(join(dir,'secrets.json'),{});
   if(secret.gemini&&safeStorage.isEncryptionAvailable()){try{translationKey=safeStorage.decryptString(Buffer.from(secret.gemini,'base64'));}catch{translationKey='';}}
-  state={settings:store.value,connected:false,playback:null,lyrics:null,status:'Waiting for a song',edit:false,warnings:[],trackOffsetMs:0,plainIndex:0,setupStatus:'Choose Connect Spotify to get started',connectionPhase:'idle',translations:[],translationStatus:'This song has not been translated',translationKeySet:!!translationKey};
+  state={settings:store.value,connected:false,playback:null,lyrics:null,status:'Waiting for a song',edit:false,warnings:[],trackOffsetMs:0,plainIndex:0,setupStatus:'Choose Connect Spotify to get started',connectionPhase:'idle',translations:[],translationStatus:'This song has not been translated',translationKeySet:!!translationKey,translationBusy:false,profiles:Object.keys(profiles).sort()};
   overlay=new BrowserWindow({...geometry(store.value),show:false,transparent:true,frame:false,thickFrame:false,resizable:false,skipTaskbar:true,focusable:false,hasShadow:false,alwaysOnTop:true,backgroundColor:'#00000000',title:'Lyrics Overlay',webPreferences:preferences('overlay')});
   overlay.setAlwaysOnTop(true,'screen-saver');overlay.setIgnoreMouseEvents(true,{forward:true});
   secureWindow(overlay,'overlay');
@@ -104,8 +111,12 @@ async function start() {
     connected:connected=>{
       if(closing)return;
       state.connected=connected;
-      if(!connected){lyricRequest?.abort();translationRequest?.abort();translationGeneration++;requestGeneration++;state.playback=null;state.lyrics=null;state.translations=[];state.status='Spotify disconnected';if(state.connectionPhase!=='installing')state.connectionPhase='waiting';state.setupStatus='Waiting for Spotify. Open it or choose Repair connection.';}
-      else{state.status='Connected; waiting for playback';state.connectionPhase='connected';state.setupStatus='Connected securely on this device';}
+      clearTimeout(disconnectTimer);
+      if(!connected){
+        if(state.connectionPhase!=='installing')state.connectionPhase='waiting';state.setupStatus='Reconnecting to Spotify…';
+        // A short transport hiccup must not erase the current song or cancel a translation.
+        disconnectTimer=setTimeout(()=>{if(closing||state.connected)return;lyricRequest?.abort();translationRequest?.abort();translationGeneration++;requestGeneration++;state.translationBusy=false;state.playback=null;state.lyrics=null;state.translations=[];state.status='Spotify disconnected';state.setupStatus='Open Spotify to reconnect, or choose Repair connection.';broadcast();},5000);
+      }else{if(!state.playback)state.status='Connected; waiting for playback';state.connectionPhase='connected';state.setupStatus='Connected securely on this device';}
       broadcast();
     },
     command:action=>{if(action==='toggle')void patchSettings({visible:!state.settings.visible});else openSettings();},
@@ -182,7 +193,7 @@ function patchSettings(patch:Partial<Settings>):Promise<void> {
       else warning('Startup registration is available in the installed app.');
     }
     if(s.onlineLyrics!==previous.onlineLyrics)void loadLyrics(true);
-    if(['translationProvider','translationTarget','translationSource','translationModel','translationStyle','ollamaUrl'].some(key=>key in patch&&s[key as keyof Settings]!==previous[key as keyof Settings])){translationRequest?.abort();translationGeneration++;state.translations=[];state.translationStatus='Translation settings changed; choose Translate song';}
+    if(['translationProvider','translationTarget','translationSource','translationModel','translationStyle','ollamaUrl'].some(key=>key in patch&&s[key as keyof Settings]!==previous[key as keyof Settings])){translationRequest?.abort();translationGeneration++;state.translationBusy=false;state.translations=[];state.translationStatus='Translation settings changed; choose Translate song';}
     if(s.showTranslation&&!previous.showTranslation&&!state.translations.length)void restoreCachedTranslation();
     broadcast();
   });
@@ -191,7 +202,7 @@ function patchSettings(patch:Partial<Settings>):Promise<void> {
 async function restoreCachedTranslation(){
   const track=state.playback?.track,lyrics=state.lyrics,generation=translationGeneration;
   if(!track||!lyrics)return;
-  const cached=await translator.cached(track,lyrics,state.settings);
+  const cached=await translator.cached(track,lyrics,state.settings,translationKey);
   if(closing||generation!==translationGeneration||!state.settings.showTranslation||state.lyrics!==lyrics)return;
   if(cached){state.translations=cached;state.translationStatus='Cached translation ready';broadcast();}
 }
@@ -219,7 +230,7 @@ function receivePlayback(p:Playback) {
   const changed=!previous||previous.revision!==p.revision||previous.track?.uri!==p.track?.uri;
   state.playback=p;
   if(changed){
-    translationRequest?.abort();translationGeneration++;state.translations=[];state.translationStatus='This song has not been translated';
+    translationRequest?.abort();translationGeneration++;state.translationBusy=false;state.translations=[];state.translationStatus='This song has not been translated';
     state.lyrics=null;state.plainIndex=0;state.trackOffsetMs=p.track ? offsets[trackKey(p.track)]??0 : 0;
     void loadLyrics();
   }
@@ -234,11 +245,11 @@ async function loadLyrics(refresh=false) {
     const lyrics=await lyricsStore.find(p.track,controller.signal,state.settings.onlineLyrics,refresh);
     if(generation!==requestGeneration||controller.signal.aborted)return;
     const changedText=JSON.stringify(state.lyrics?.lines.map(l=>l.text))!==JSON.stringify(lyrics?.lines.map(l=>l.text));
-    if(changedText){translationRequest?.abort();translationGeneration++;state.translations=[];}
+    if(changedText){translationRequest?.abort();translationGeneration++;state.translationBusy=false;state.translations=[];}
     state.lyrics=lyrics;
     state.status=!lyrics?'No matching lyrics; import a local file':lyrics.kind==='plain'?'Unsynced lyrics; select a line in settings':lyrics.kind==='instrumental'?'Instrumental · no lyrics':`${lyrics.source} · ${lyrics.kind==='word'?'Word-synced':'Line-synced'}`;
     if(lyrics&&state.settings.showTranslation){
-      const cached=await translator.cached(p.track,lyrics,state.settings);
+      const cached=await translator.cached(p.track,lyrics,state.settings,translationKey);
       if(generation!==requestGeneration||controller.signal.aborted)return;
       if(cached){state.translations=cached;state.translationStatus='Cached translation ready';}
     }
@@ -289,7 +300,7 @@ function installIpc() {
   });
   ipcMain.handle('action',async(e,raw:unknown,option:unknown)=>{
     authorize(e);
-    const action=z.enum(['toggle','edit','settings','pair','import','clearImport','refresh','install','resetPosition','resetPairing','selectPlain','savePosition','restorePosition','place','translate','cancelTranslation','openLink']).parse(raw);
+    const action=z.enum(['toggle','edit','settings','pair','import','clearImport','refresh','install','resetPosition','resetPairing','selectPlain','savePosition','restorePosition','place','translate','cancelTranslation','openLink','saveProfile','loadProfile','deleteProfile','exportSettings','importSettings']).parse(raw);
     if(BrowserWindow.fromWebContents(e.sender)===overlay&&!['edit','settings'].includes(action))throw new Error('Settings window required');
     if(action==='toggle')await patchSettings({visible:!state.settings.visible});
     if(action==='edit')setEdit(!state.edit);
@@ -310,7 +321,24 @@ function installIpc() {
       await patchSettings({x:Math.round(area.x+(area.width-s.width)/2),y:placement==='top'?area.y+24:placement==='bottom'?area.y+area.height-s.height-36:Math.round(area.y+(area.height-s.height)/2),visible:true});
     }
     if(action==='translate'){void translateCurrent();return null;}
-    if(action==='cancelTranslation'){translationRequest?.abort();translationGeneration++;state.translationStatus='Translation stopped';broadcast();}
+    if(action==='cancelTranslation'){translationRequest?.abort();translationGeneration++;state.translationBusy=false;state.translationStatus='Translation stopped';broadcast();}
+    if(['saveProfile','loadProfile','deleteProfile'].includes(action)){
+      const name=z.string().trim().min(1).max(40).parse(option);
+      if(action==='saveProfile'){if(Object.keys(profiles).length>=30&&!Object.hasOwn(profiles,name))throw Error('Keep up to 30 saved profiles.');Object.defineProperty(profiles,name,{value:structuredClone(state.settings),writable:true,enumerable:true,configurable:true});}
+      else if(action==='loadProfile'){if(!Object.hasOwn(profiles,name))throw Error('Profile not found.');await patchSettings({...profiles[name]!,tourComplete:state.settings.tourComplete});return 'Profile applied.';}
+      else delete profiles[name];
+      await atomicJson(join(app.getPath('userData'),'profiles.json'),profiles);state.profiles=Object.keys(profiles).sort();broadcast();return action==='saveProfile'?'Profile saved.':'Profile removed.';
+    }
+    if(action==='exportSettings'){
+      const target=await dialog.showSaveDialog(settingsWindow!,{title:'Export all settings',defaultPath:'Lyrics-Overlay-settings.json',filters:[{name:'Settings',extensions:['json']}]});
+      if(target.canceled||!target.filePath)return null;await atomicJson(target.filePath,{format:'lyrics-overlay-settings',version:1,settings:state.settings});return 'All settings exported. API keys are not included.';
+    }
+    if(action==='importSettings'){
+      const target=await dialog.showOpenDialog(settingsWindow!,{title:'Import all settings',properties:['openFile'],filters:[{name:'Settings',extensions:['json']}]});
+      const path=target.filePaths[0];if(target.canceled||!path)return null;if((await stat(path)).size>100000)throw Error('Settings file is too large.');
+      const file=z.object({format:z.literal('lyrics-overlay-settings'),version:z.literal(1),settings:settingsSchema.strict()}).parse(JSON.parse(await readFile(path,'utf8')));
+      localOllamaUrl(file.settings.ollamaUrl);await patchSettings(file.settings);return 'All settings imported.';
+    }
     if(action==='openLink'){
       const key=z.enum(['website','github','x','instagram','email','repository','releases','geminiKey']).parse(option);await shell.openExternal(developer.links[key]);
     }
@@ -358,15 +386,26 @@ async function translateCurrent(){
   const track=state.playback?.track,lyrics=state.lyrics;
   if(!track||!lyrics?.lines.length){state.translationStatus='Play a song with lyrics first';broadcast();return;}
   translationRequest?.abort();const generation=++translationGeneration,controller=new AbortController();translationRequest=controller;
-  state.translationStatus='Preparing translation…';broadcast();
+  state.translationBusy=true;state.translationStatus='Preparing translation…';broadcast();
   try{
     await patchSettings({showTranslation:true});
-    const lines=await translator.translate(track,lyrics,state.settings,translationKey,controller.signal,(lines,done,total)=>{
+    let settings=resolvedTranslation(state.settings,translationKey);
+    const startIndex=Math.max(0,lineAt(lyrics.lines,state.playback?.positionMs??0));
+    const progress=(lines:string[],done:number,total:number)=>{
       if(generation!==translationGeneration||controller.signal.aborted)return;
-      state.translations=lines;state.translationStatus=`Translating · ${done} / ${total}`;broadcast();
-    });
+      state.translations=lines;state.translationStatus=`${settings.translationProvider} · ${done} / ${total}`;broadcast();
+    };
+    let lines:string[];
+    try{lines=await translator.translate(track,lyrics,settings,translationKey,controller.signal,progress,startIndex);}
+    catch(error){
+      controller.signal.throwIfAborted();
+      if(state.settings.translationProvider!=='auto'||settings.translationProvider!=='gemini')throw error;
+      settings={...settings,translationProvider:'mymemory'};state.translationStatus='AI unavailable; using basic translation…';broadcast();
+      lines=await translator.translate(track,lyrics,settings,'',controller.signal,progress,startIndex);
+    }
     if(generation!==translationGeneration||controller.signal.aborted)return;
     state.translations=lines;state.translationStatus='Translation ready and cached for this song';
   }catch(error){if(generation!==translationGeneration||controller.signal.aborted)return;state.translationStatus=error instanceof Error?error.message:'Translation failed';}
+  finally{if(generation===translationGeneration){state.translationBusy=false;broadcast();}}
   broadcast();
 }

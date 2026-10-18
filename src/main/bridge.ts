@@ -40,11 +40,12 @@ export class LocalBridge {
     this.server.on('error',()=>{if(!this.stopping)this.callbacks.error('The local connection stopped. Restart the companion.');});
     this.heartbeat = setInterval(()=>{
       for (const client of this.wss.clients) {
-        const state = client as WebSocket & {alive?: boolean};
-        if (state.alive === false) { client.terminate(); continue; }
-        state.alive = false; client.ping();
+        const state = client as WebSocket & {missed?:number};
+        state.missed=(state.missed??0)+1;
+        if (state.missed>3) {client.terminate();continue;}
+        client.ping();
       }
-    }, 10_000);
+    }, 15_000);
     this.heartbeat.unref();
   }
   createPairing(): string { const code = String(randomInt(0,100_000_000)).padStart(8,'0'); this.pairing={code,expires:Date.now()+300000}; return code; }
@@ -52,7 +53,7 @@ export class LocalBridge {
     // Trusted local installer flow: generate a companion-only credential, never a Spotify access token.
     const token=randomBytes(32).toString('hex');this.tokenHash=hash(token);this.pairing=null;
     await atomicJson(join(this.dir,'pairing.json'),{tokenHash:this.tokenHash});
-    for(const ws of this.wss.clients)ws.close(4001,'Extension updated');
+    // Keep current playback alive while Spicetify applies the new extension.
     return token;
   }
   async revoke() {
@@ -62,9 +63,9 @@ export class LocalBridge {
   }
   private connection(ws: WebSocket) {
     let authenticated = false, seq = -1, count = 0, windowAt = Date.now();
-    const timeout = setTimeout(()=>ws.close(4001,'Authentication required'),8000);
+    const timeout = setTimeout(()=>ws.close(4004,'Authentication timed out; retry'),15000);
     ws.on('error',()=>{});
-    ws.on('pong',()=>{(ws as WebSocket & {alive?:boolean}).alive=true;});
+    ws.on('pong',()=>{(ws as WebSocket & {missed?:number}).missed=0;});
     ws.on('close',()=>{
       clearTimeout(timeout);
       if (this.active === ws) { this.active=null; if(!this.stopping)this.callbacks.connected(false); }

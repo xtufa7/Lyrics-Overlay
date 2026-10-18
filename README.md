@@ -1,71 +1,85 @@
-# Lyrics Overlay
+<div align="center">
 
-**Your music. Your space.** A frameless Windows desktop lyrics overlay for Spicetify, by **[Nour Al-Shammari · 0xTuFa7](https://xtufa7.github.io)**.
+![Lyrics Overlay — Your music. Your space.](assets/github/hero.svg)
 
-![Lyrics Overlay](assets/preview.png)
+[![Download for Windows](https://img.shields.io/badge/Download-Windows_x64-bcb5ff?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/xtufa7/Lyrics-Overlay/releases/latest)
+[![Latest release](https://img.shields.io/github/v/release/xtufa7/Lyrics-Overlay?style=for-the-badge&color=a5e7d0&label=release)](https://github.com/xtufa7/Lyrics-Overlay/releases/latest)
+[![Build](https://img.shields.io/github/actions/workflow/status/xtufa7/Lyrics-Overlay/build.yml?branch=main&style=for-the-badge&label=Windows)](https://github.com/xtufa7/Lyrics-Overlay/actions/workflows/build.yml)
+[![License](https://img.shields.io/badge/License-MIT-9892b3?style=for-the-badge)](LICENSE)
 
-Current words, a quieter upcoming sentence, optional translation and album cover above your applications. No permanent rectangle, toolbar or background. The settings interface is English; lyrics and translations retain their own language and direction. The desktop companion runs independently of Spotify and passes clicks through.
+**Lyrics that feel at home on your desktop.**
 
-## Download
+Live words · A quieter next line · Optional translation · A look of your own
 
-**[Get the latest Windows release](https://github.com/xtufa7/Lyrics-Overlay/releases/latest)** — choose the portable x64 ZIP or Setup EXE. No Node.js or developer tools are needed to run the companion. A configured [Spicetify](https://spicetify.app/docs/getting-started) desktop client is required.
+[Install](#get-started) · [Explore](#a-space-of-your-own) · [Translation](#words-without-borders) · [Help](docs/TROUBLESHOOTING.md)
 
-### Install from GitHub
+</div>
 
-The installer downloads the latest portable release, verifies its SHA-256 against the release manifest, creates a Start-menu shortcut, launches the companion and connects the extension:
+## Get started
+
+Download the **[portable ZIP or Setup EXE](https://github.com/xtufa7/Lyrics-Overlay/releases/latest)** for Windows x64. No Node.js or development tools needed. A working [Spicetify](https://spicetify.app/docs/getting-started) desktop Spotify client is required.
+
+Or install from PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/xtufa7/Lyrics-Overlay/main/install.ps1 | iex
 ```
 
-You can [read the script](install.ps1) first, or download/extract the ZIP yourself. The portable installer keeps versioned files under `%LOCALAPPDATA%\0xTuFa7\LyricsOverlay`. It does not require administrator access.
+The [installer](install.ps1) downloads the latest portable release, checks its SHA-256, creates a Start-menu shortcut and launches the companion. Files stay in versioned folders under `%LOCALAPPDATA%\0xTuFa7\LyricsOverlay`; administrator access is unnecessary.
 
-### Connect Spotify
+1. Open **Lyrics Overlay** and choose **Connect Spotify**.
+2. Let it apply the extension. Spotify may restart once.
+3. Play a song, pick a style and make the desktop yours.
 
-1. Open Lyrics Overlay.
-2. Click **Connect Spotify** on the home screen.
-3. The companion installs its extension, provisions an authenticated local credential and applies Spicetify. Spotify may restart. No Spotify login, password or manual pairing code is needed.
-4. Play a song. The home screen shows the actual connection, current track and lyrics source. You can minimize Spotify or close Settings while the tray app stays running.
+No Spotify password, login token or manual pairing code is needed. Close Settings to keep the tray app running. Use **Repair connection** after a Spotify/Spicetify reinstall.
 
-The advanced section retains manual pairing as a fallback. **Repair / update connection** repeats setup if Spotify was reinstalled or Spicetify needs reapplying. Merely enabling an extension without starting the companion cannot draw above other Windows applications.
+![The English workspace, connected to an original demo track](assets/screenshots/workspace.png)
 
-## Make it yours
+## A space of your own
 
-| Feature | Behavior |
+Start with nothing around the words, or give them a little home. Cover artwork is optional in every style.
+
+| Text only | Floating card |
+| :---: | :---: |
+| ![Transparent text style](assets/screenshots/text.png) | ![Rounded floating card](assets/screenshots/pill.png) |
+| **Liquid glass** | **Hanging sign** |
+| ![Glass style with artwork](assets/screenshots/glass.png) | ![Hanging sign style](assets/screenshots/sign.png) |
+
+| Make it feel right | What you can change |
 | --- | --- |
-| Themes | Midnight, Graphite, Ocean, Forest and Daylight; instant previews |
-| Album artwork | Spotify cover in now playing; optional cover beside desktop lyrics |
-| Guided tour | First-run circular spotlights; skip or replay from About |
-| Word motion | Current-word color or progressive sweep, plus an optional moving underline |
-| Frameless lyrics | Transparent normal mode; legacy border/background settings are ignored |
-| Upcoming sentence | Optional smaller, dimmer next cue; blanks and final cues handled correctly |
-| Saved position | Save the current location, then restore it and show lyrics with one shortcut |
-| Languages | First-strong Unicode direction, per-line RTL/LTR entrance, intact shaped text |
-| Animation | Slide, cinematic fade, real-timed karaoke, minimal and dynamic; reduced motion |
-| Appearance | Offline Cairo/Inter/Noto Sans JP, size, weight, colors, opacity, shadow and glow |
-| Timing | Play/pause, seeks, track changes, monotonic interpolation and per-track/global offsets |
-| Sources | Strict LRCLIB lookup/search, local LRC/TTML/TXT imports, disk cache |
-| Translation | Contextual Gemini, local Ollama, or basic keyless MyMemory |
+| **Five themes** | Midnight, Graphite, Ocean, Forest and Daylight |
+| **Your typography** | Offline Manrope, Outfit, Rubik, Tajawal, Cairo, Inter and Noto Sans JP, plus Windows fonts |
+| **Follow the singer** | Current-word color, sweep, moving underline, glow, pulse or bounce |
+| **Between sentences** | Slide, rise, crossfade, blur, zoom or no transition |
+| **Set the mood** | Text and glow colors, panel tint, opacity, border and corners |
+| **A favorite place** | Top-center text shortcut, display presets, drag/resize and saved position |
+| **Keep your setups** | Named complete preferences, plus export and import without API keys |
+| **Find your way** | A skippable circular spotlight tour you can replay anytime |
 
-Real word timestamps always take priority. For ordinary line-synced lyrics, **Estimate when needed** distributes a visual word highlight across the line; it cannot recover the singer's exact word timing. **Exact timestamps only** turns these estimates off. Provider timestamps and lyric files are never altered. Motion presets animate line transitions independently from word highlighting.
+![Appearance controls and live preview](assets/screenshots/appearance.png)
 
-The Spotify extension is about **4.5 KB** without a bundled desktop validation library. Overlay updates are capped at 30 fps while playing and stop when paused or hidden. Settings previews stop while hidden or on About. The companion includes Electron's runtime; the small extension size is not the total application size.
+**One shortcut. Same place.** Use **Ctrl + Alt + P** to show lyrics at your saved position, **Ctrl + Alt + L** to toggle visibility, and **Ctrl + Alt + E** to move or resize. Customize combinations in Settings; occupied defaults are replaced with available alternatives shown in the interface. Outside edit mode, clicks pass through to your applications.
 
-Default shortcuts are **Ctrl + Alt + L** (visibility), **Ctrl + Alt + E** (edit), and **Ctrl + Alt + P** (show at saved position). If a shortcut is already occupied, the app selects an available alternative and displays it in the position/settings UI. Click a shortcut field and press a new combination to customize it.
+Real word timestamps take priority. Line-synced songs can use **optional visual word estimates**, which may differ from the singer. Select **Exact timestamps only** to disable estimates. Long single lines can shrink to fit. Original lyric timing and shaped Arabic text stay intact.
 
-Use Edit Mode to drag the overlay or resize its bottom-right corner. **Done**, Escape or the edit shortcut returns to click-through mode. Placement presets, explicit coordinates and display selection are available under **Position & shortcuts**. Measurements use Windows logical pixels. A disconnected/rescaled monitor is handled by clamping bounds to an available work area.
+The liquid-glass option is a styled transparent panel; native desktop blur is not guaranteed by Electron or every Windows compositor.
 
-## Translation
+## Words without borders
 
-Translation is requested explicitly under **Translation**; enabling display alone does not send a song to a service. **Automatic · Arabic ↔ English** translates Arabic lines into English and English lines into Arabic. Select a target language to override this. The header switch instantly hides or restores translation.
+**Arabic → English. English → Arabic. Or a language you choose.** Translation is independent: hide it instantly, move it above or below, and give it its own font, color and glow.
 
-Translation has its own font, size, color, glow, opacity and above/below placement. AI providers support natural, faithful and poetic styles, with separate cache identities so changing the style cannot silently reuse a different result.
+| Provider | Setup |
+| --- | --- |
+| **Auto** | Uses Gemini when a key is configured, otherwise basic MyMemory; falls back to basic translation if Gemini fails |
+| **Gemini** | Your API key and a model available to your account; contextual natural, faithful or poetic translation |
+| **Ollama** | Your installed local model/server; only IPv4 loopback endpoints are accepted |
+| **MyMemory** | Basic keyless translation with service limits and less context |
 
-- **Gemini** translates up to 30 requested lines per batch with surrounding context, track title and artist. Supply your own API key and a model available to your account. Provider limits/billing apply. Keys are encrypted using Windows DPAPI through Electron `safeStorage`; they are never sent to Spotify or returned in state snapshots.
-- **Ollama** uses a model already installed on your computer (for example `qwen3:8b`). Run its local server and select the model. Only `http://127.0.0.1` endpoints are accepted; no API key is needed and lyric text stays local.
-- **MyMemory** offers basic keyless translation with usage limits and lower contextual quality. Repeated lines are deduplicated; automatic source-language detection can be overridden. Long lines are rejected instead of silently truncated.
+Choose **Translate song** to request it. Merely showing translation does not send lyrics. The current sentence is prioritized, results appear as they arrive, and repeated requests can use the local cache. Gemini/MyMemory receive requested lyric text; Ollama stays local. Provider limits and billing apply. API keys are encrypted with Windows DPAPI and excluded from saved-setup exports. Translation quality depends on the provider and model.
 
-Gemini and MyMemory receive lyric text when you request translation. Translation quality depends on the service/model; results can still need human review. Every AI response must preserve requested line IDs; missing, duplicate or mismatched mappings are rejected. Translation never changes the original timing or invents word timestamps. Results cache per track text, provider, language and model.
+## Small where it matters
+
+The Spotify extension is about **4.5 KB**. The companion includes Electron's runtime, so that is not its download size or memory use. Drawing is capped at 30 fps during playback and stops while paused or hidden; hidden settings previews also stop. Fonts load locally. Playback reconnects with its existing credential, brief socket interruptions keep the current lyric, and stale track/translation responses are rejected.
 
 ## Lyrics formats
 
@@ -77,9 +91,11 @@ Gemini and MyMemory receive lyric text when you request translation. Translation
 
 Import files you are permitted to use. Provider lyrics retain their owners' rights and are not bundled or published with this project. Undocumented Spotify lyrics APIs and extraction from unrelated extensions are not used.
 
-## Development
 
-Node 24 LTS is recommended on Windows:
+<details>
+<summary><strong>Build it yourself</strong></summary>
+
+Node 24 on Windows is used in CI.
 
 ```powershell
 npm ci
@@ -90,24 +106,36 @@ npm run dist
 npm run test:packaged
 ```
 
-If npm's script policy skipped Electron's download, run `node node_modules/electron/install.js` once. Builds include offline fonts, runtime and licenses. `dist` contains the companion and extension; `release` contains the NSIS installer and portable ZIP. Automated desktop tests use an isolated profile and test-only port **43828**, so real Spotify's local connection on **43827** is not disturbed. Do not run multiple desktop suites simultaneously.
+If npm skipped Electron's download, run `node node_modules/electron/install.js` once. Builds include runtime, offline fonts and licenses. `release/` contains the installer and portable archive. Desktop checks use isolated profiles and port **43828**; production uses **43827**. Run one desktop suite at a time.
 
-```
-src/extension/     Documented Spicetify playback API and reconnecting client
-src/shared/        Protocol schemas, monotonic clock, direction and attribution
-src/lyrics/        Parsers, strict provider matching and translation adapters
-src/main/          Local authentication, lifecycle, settings and minimal preload
-src/renderer/      Arabic settings UI, live preview and frameless lyric rendering
-scripts/          Build, deployment and packaged Electron checks
-tests/            Focused engine, security, persistence and translation tests
-```
+| Directory | Purpose |
+| --- | --- |
+| `src/extension` | Spicetify playback client |
+| `src/lyrics` | Parsers, provider matching, translation |
+| `src/main` | Lifecycle, local authentication, persistence |
+| `src/renderer` | English settings, live preview, overlay |
+| `src/shared` | Schemas, clocks, direction and attribution |
 
-Playback is event-driven with low-rate correction, revision/sequence rejection and cancellation of stale provider/translation requests. Settings, imported files, offsets and cache live under `%APPDATA%\Spicetify Lyrics Overlay`. Successful provider cache entries refresh after seven days and remain usable offline; missing results cache for fifteen minutes. The cache is pruned at startup and periodically during writes.
+</details>
 
-See [Arabic quick start](docs/START-HERE.ar.md), [verification](docs/VERIFICATION.md), [security](docs/SECURITY.md), [troubleshooting](docs/TROUBLESHOOTING.md) and [contributing](CONTRIBUTING.md). Exclusive-fullscreen/protected applications may hide overlays; no protection bypass is attempted. Releases are unsigned unless a real publisher certificate is configured. Clean-VM installation and multiple physical monitor/DPI combinations remain manual release checks.
+## A few useful links
 
-## Developer
+[Verification](docs/VERIFICATION.md) · [Security](docs/SECURITY.md) · [Troubleshooting](docs/TROUBLESHOOTING.md) · [Contributing](CONTRIBUTING.md) · [Release notes](docs/RELEASE-NOTES.md) · [Arabic quick start](docs/START-HERE.ar.md)
 
-**Nour Al-Shammari · 0xTuFa7** — [Website](https://xtufa7.github.io/) · [GitHub](https://github.com/xtufa7) · [X](https://x.com/0xtufa7) · [Instagram](https://instagram.com/inoor.jpg) · [Email](mailto:tufa7shaml@gmail.com).
+Settings, caches and imported lyrics live under `%APPDATA%\Spicetify Lyrics Overlay`. Exclusive-fullscreen/protected apps may hide overlays. Releases are unsigned. Multiple physical monitor/DPI combinations and clean-VM installation remain manual QA.
 
-© 2026 0xTuFa7. Application code is MIT licensed. Bundled fonts retain their SIL Open Font Licenses, and other bundled dependencies retain their licenses. Independent of Spotify/Spicetify.
+---
+
+<div align="center">
+
+<img src="assets/github-avatar.png" width="56" height="56" alt="xtufa7 profile picture">
+
+**Made by [xtufa7](https://github.com/xtufa7)** · Your music. Your space.
+
+[Website](https://xtufa7.github.io/) · [GitHub](https://github.com/xtufa7) · [X](https://x.com/0xtufa7) · [Instagram](https://instagram.com/inoor.jpg)
+
+© 2026 xtufa7 · [MIT](LICENSE) · Independent of Spotify and Spicetify.
+
+Screenshots use original demo text. Lyrics, fonts and dependencies retain their respective owners' rights.
+
+</div>

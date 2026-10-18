@@ -29,14 +29,19 @@ function sourceLanguage(text:string):string {
   return 'en';
 }
 export function targetLanguage(text:string,s:Settings):string {
-  return s.translationTarget==='auto'?sourceLanguage(text)==='ar'?'en':'ar':s.translationTarget;
+  return s.translationTarget==='auto'?(s.translationSource==='auto'?sourceLanguage(text):s.translationSource)==='ar'?'en':'ar':s.translationTarget;
 }
+export function resolvedTranslation(s:Settings,key:string):Settings{return s.translationProvider==='auto'?{...s,translationProvider:key?'gemini':'mymemory'}:s;}
 export class TranslationEngine {
   constructor(private dir:string,private request:typeof fetch=fetch){}
-  async cached(track:Track,lyrics:Lyrics,s:Settings):Promise<string[]|null>{
-    const path=join(this.dir,'translations',`${translationIdentity(track,lyrics,s)}.json`);
-    const parsed=z.array(z.string()).safeParse(await readJson(path,null));
-    return parsed.success&&parsed.data.length===lyrics.lines.length?parsed.data:null;
+  async cached(track:Track,lyrics:Lyrics,s:Settings,key=''):Promise<string[]|null>{
+    const choices=[resolvedTranslation(s,key)];if(s.translationProvider==='auto'&&key)choices.push({...s,translationProvider:'mymemory'});
+    for(const setting of choices){
+      const path=join(this.dir,'translations',`${translationIdentity(track,lyrics,setting)}.json`);
+      const parsed=z.array(z.string()).safeParse(await readJson(path,null));
+      if(parsed.success&&parsed.data.length===lyrics.lines.length)return parsed.data;
+    }
+    return null;
   }
   private async json(url:string,init:RequestInit,signal:AbortSignal):Promise<any>{
     let r:Response;
@@ -48,8 +53,10 @@ export class TranslationEngine {
     while(true){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>2_000_000){await reader.cancel();throw new Error('Translation response exceeds the size limit.');}chunks.push(value);}
     signal.throwIfAborted();return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   }
-  async translate(track:Track,lyrics:Lyrics,s:Settings,key:string,signal:AbortSignal,progress:(lines:string[],done:number,total:number)=>void):Promise<string[]> {
+  async translate(track:Track,lyrics:Lyrics,s:Settings,key:string,signal:AbortSignal,progress:(lines:string[],done:number,total:number)=>void,startIndex=0):Promise<string[]> {
+    s=resolvedTranslation(s,key);
     const texts=lyrics.lines.map(l=>l.text),pending=texts.map((text,id)=>({id,text})).filter(l=>l.text.trim());
+    if(startIndex>0)pending.sort((a,b)=>(a.id-startIndex+texts.length)%texts.length-(b.id-startIndex+texts.length)%texts.length);
     if(pending.length>500||texts.join('').length>60000)throw new Error('Lyrics exceed the translation limit of 500 lines or 60,000 characters.');
     const cacheDir=join(this.dir,'translations');await mkdir(cacheDir,{recursive:true});
     const path=join(cacheDir,`${translationIdentity(track,lyrics,s)}.json`);

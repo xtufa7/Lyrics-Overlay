@@ -1,5 +1,7 @@
 import './shared.css';
 import './overlay.css';
+import './surface.css';
+import {configureSurface} from './surface';
 import {LyricView} from './lyric-view';
 import {PlaybackClock,lineAt,followingLine,directionOf,fontFor} from '../shared/timing';
 import type {AppState} from '../shared/model';
@@ -32,6 +34,7 @@ function receive(next:AppState){
  const s=next.settings;
  if(!previous||JSON.stringify(previous.settings)!==JSON.stringify(s)){
   settingsVersion++;view.configure(s);
+  configureSurface(document.querySelector<HTMLElement>('#display-surface')!,s);
   for(const [node,size,opacity,color] of [[nextLine,.64,s.nextOpacity,s.color],[translationLine,s.translationSize,s.translationOpacity,s.translationColor]] as const){
    node.style.fontSize=String(Math.max(12,s.fontSize*size))+'px';node.style.opacity=String(opacity*s.opacity);node.style.textAlign=s.align;node.style.color=color;
   }

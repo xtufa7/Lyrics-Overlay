@@ -30,9 +30,9 @@ export function directionOf(text: string, override: 'auto' | 'ltr' | 'rtl' = 'au
 }
 export function fontFor(text: string, chosen: string): string {
   if (chosen !== 'auto') return `"${chosen}", "Segoe UI", sans-serif`;
-  if (/\p{Script=Arabic}/u.test(text)) return 'Cairo, "Segoe UI", sans-serif';
+  if (/\p{Script=Arabic}/u.test(text)) return 'Tajawal, Cairo, "Segoe UI", sans-serif';
   if (/[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(text)) return '"Noto Sans JP", "Yu Gothic UI", sans-serif';
-  return 'Inter, "Segoe UI", "Malgun Gothic", sans-serif';
+  return 'Manrope, Inter, "Segoe UI", "Malgun Gothic", sans-serif';
 }
 export function graphemes(text: string): string[] {
   return [...new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)].map(s => s.segment);

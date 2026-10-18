@@ -48,7 +48,7 @@ test('Missing AI keys and aborted translations fail without producing fabricated
  const dir=await mkdtemp(join(tmpdir(),'lyrics-translation-abort-'));
  try{
   const engine=new TranslationEngine(dir,async()=>{throw new Error('Should not contact a service');});
-  await assert.rejects(()=>engine.translate(track,lyrics,defaults,'',new AbortController().signal,()=>{}),/API key/);
+  await assert.rejects(()=>engine.translate(track,lyrics,{...defaults,translationProvider:'gemini'},'',new AbortController().signal,()=>{}),/API key/);
   const controller=new AbortController();controller.abort();await assert.rejects(()=>engine.translate(track,lyrics,defaults,'fixture',controller.signal,()=>{}));
  }finally{await rm(dir,{recursive:true,force:true});}
 });
@@ -64,4 +64,12 @@ test('Visual word estimates preserve Unicode ranges and original provider timing
  const words=visualWords(line,true);assert.ok(words.length>=4);assert.equal(words[0]!.startMs,1000);assert.equal(words.at(-1)!.endMs,6000);
  assert.ok(words.every((w,i)=>w.endMs>w.startMs&&line.text.slice(w.from,w.to).length>0&&(i===0||w.startMs===words[i-1]!.endMs)));
  assert.ok(!('words' in line));const exact=[{from:0,to:5,startMs:1200,endMs:1800}];assert.equal(visualWords({...line,words:exact},true),exact);
+});
+test('Automatic keyless translation prioritizes the current line and preserves final line indexes',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'lyrics-current-')),requested:string[]=[];
+ const request:typeof fetch=async input=>{const url=new URL(String(input));requested.push(url.searchParams.get('q')!);return Response.json({responseStatus:200,responseData:{translatedText:'Translated: '+url.searchParams.get('q')}});};
+ try{
+  const result=await new TranslationEngine(dir,request).translate(track,lyrics,{...defaults,translationProvider:'auto'},'',new AbortController().signal,()=>{},2);
+  assert.equal(requested[0],lyrics.lines[2]!.text);assert.equal(result[2],'Translated: '+lyrics.lines[2]!.text);assert.equal(result[1],'');
+ }finally{await rm(dir,{recursive:true,force:true});}
 });

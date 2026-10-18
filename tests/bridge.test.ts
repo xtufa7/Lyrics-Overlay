@@ -41,3 +41,9 @@ test('Stopping an authenticated bridge is idempotent and cannot notify disposed 
     assert.deepEqual(events,[]);assert.equal(bridge.listening,false);
   }finally{await bridge.stop();await rm(dir,{recursive:true,force:true});}
 });
+test('Reprovisioning keeps the live Spotify session available until the replacement extension connects',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'lyrics-repair-')),connections:boolean[]=[];
+ const bridge=new LocalBridge(dir,{playback:()=>{},connected:v=>connections.push(v),command:()=>{},error:()=>{}},port);
+ try{await bridge.start();const old=await open();await auth(old,{code:bridge.createPairing()});const token=await bridge.provision();assert.equal(old.readyState,WebSocket.OPEN);const replacement=await open();await auth(replacement,{token});assert.ok(connections.every(Boolean));replacement.terminate();old.terminate();}
+ finally{await bridge.stop();await rm(dir,{recursive:true,force:true});}
+});

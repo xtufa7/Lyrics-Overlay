@@ -23,7 +23,17 @@ export const messageSchema = z.discriminatedUnion('type', [
 export type Word = { startMs: number; endMs: number; from: number; to: number };
 export type LyricLine = { startMs: number; endMs: number; text: string; words?: Word[] };
 export type Lyrics = { kind: 'synced' | 'word' | 'plain' | 'instrumental'; lines: LyricLine[]; source: string; fetchedAt: number };
+export const fontSchema=z.enum(['auto','Inter','Manrope','Outfit','Rubik','Tajawal','Cairo','Noto Sans JP','Segoe UI','Arial','Georgia','Verdana','Consolas']);
 export const settingsSchema = z.object({
+  surface:z.enum(['text','pill','glass','sign']).default('text'),
+  surfaceColor:z.string().regex(/^#[\da-f]{6}$/i).default('#202033'),surfaceOpacity:z.number().min(.1).max(1).default(.82),
+  surfaceRadius:z.number().min(0).max(60).default(24),surfaceBorder:z.string().regex(/^#[\da-f]{6}$/i).default('#bcb5ff'),
+  lineTransition:z.enum(['slide','rise','crossfade','blur','zoom','none']).default('rise'),
+  wordAnimation:z.enum(['glow','pulse','bounce','none']).default('glow'),
+  respectSystemMotion:z.boolean().default(false),
+  glowColor:z.string().regex(/^#[\da-f]{6}$/i).default('#bcb5ff'),
+  showCreatorCredits:z.boolean().default(true),
+  autoFit:z.boolean().default(true),
   theme:z.enum(['midnight','graphite','ocean','forest','light']).default('midnight'),
   wordHighlight:z.enum(['word','sweep','off']).default('word'),
   wordTiming:z.enum(['estimate','exact']).default('estimate'),
@@ -32,7 +42,7 @@ export const settingsSchema = z.object({
   visible: z.boolean().default(true), monitor: z.string().max(100).default('primary'),
   x: z.number().finite().nullable().default(null), y: z.number().finite().nullable().default(null),
   width: z.number().int().min(240).max(2400).default(680), height: z.number().int().min(40).max(600).default(116),
-  font: z.enum(['auto', 'Inter', 'Cairo', 'Noto Sans JP', 'Segoe UI']).default('auto'),
+  font: fontSchema.default('auto'),
   fontSize: z.number().min(12).max(80).default(24), fontWeight: z.number().int().min(300).max(900).default(500),
   color: z.string().regex(/^#[\da-f]{6}$/i).default('#f5f5f7'), highlight: z.string().regex(/^#[\da-f]{6}$/i).default('#b8ffd5'),
   opacity: z.number().min(.1).max(1).default(1), shadow: z.number().min(0).max(20).default(3), glow: z.number().min(0).max(30).default(0),
@@ -46,12 +56,12 @@ export const settingsSchema = z.object({
   offsetMs: z.number().int().min(-30000).max(30000).default(0), autoStart: z.boolean().default(false),
   onlineLyrics: z.boolean().default(true),
   showNext: z.boolean().default(true), nextOpacity: z.number().min(.1).max(.8).default(.38),
-  showTranslation: z.boolean().default(false), translationProvider: z.enum(['gemini','ollama','mymemory']).default('gemini'),
+  showTranslation: z.boolean().default(false), translationProvider: z.enum(['auto','gemini','ollama','mymemory']).default('auto'),
   translationTarget: z.enum(['auto','ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('auto'),
   translationSource: z.enum(['auto','ar','en','fa','ur','he','ja','ko','zh','fr','es','de','tr']).default('auto'),
   translationModel: z.string().min(1).max(120).default('gemini-3.8-flash'),
   translationStyle:z.enum(['natural','faithful','poetic']).default('natural'),
-  translationFont:z.enum(['auto','Inter','Cairo','Noto Sans JP','Segoe UI']).default('auto'),
+  translationFont:fontSchema.default('auto'),
   translationSize:z.number().min(.5).max(1.2).default(.68),
   translationOpacity:z.number().min(.2).max(1).default(.85),
   translationColor:z.string().regex(/^#[\da-f]{6}$/i).default('#c6c3d5'),
@@ -69,13 +79,14 @@ export type AppState = {
   status: string; edit: boolean; warnings: string[]; trackOffsetMs: number; plainIndex: number;
   setupStatus: string; connectionPhase: 'idle'|'installing'|'waiting'|'connected'|'error';
   translations: string[]; translationStatus: string; translationKeySet: boolean;
+  translationBusy:boolean;profiles:string[];
 };
 export type DisplayInfo = { id: string; label: string };
 export interface OverlayAPI {
   getState(): Promise<AppState>;
   subscribe(callback: (state: AppState) => void): () => void;
   updateSettings(patch: Partial<Settings>): Promise<void>;
-  action(action: 'toggle' | 'edit' | 'settings' | 'pair' | 'import' | 'clearImport' | 'refresh' | 'install' | 'resetPosition' | 'resetPairing' | 'selectPlain' | 'savePosition' | 'restorePosition' | 'place' | 'translate' | 'cancelTranslation' | 'openLink', option?: string): Promise<string | null>;
+  action(action: 'toggle' | 'edit' | 'settings' | 'pair' | 'import' | 'clearImport' | 'refresh' | 'install' | 'resetPosition' | 'resetPairing' | 'selectPlain' | 'savePosition' | 'restorePosition' | 'place' | 'translate' | 'cancelTranslation' | 'openLink' | 'saveProfile' | 'loadProfile' | 'deleteProfile' | 'exportSettings' | 'importSettings', option?: string): Promise<string | null>;
   displays(): Promise<DisplayInfo[]>;
   setTrackOffset(ms: number): Promise<void>;
   resize(active: boolean): Promise<void>;

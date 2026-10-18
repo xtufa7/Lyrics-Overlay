@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,rm} from 'node:fs/promises';
+import {mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LyricsStore,SettingsStore,trackKey} from '../src/main/store';
@@ -13,6 +13,11 @@ test('Settings persist across restarts and invalid writes cannot alter state',as
     const second=new SettingsStore(dir);await second.load();assert.equal(second.value.x,-600);assert.equal(second.value.font,'Cairo');
     await assert.rejects(()=>second.save({width:0}));assert.equal(second.value.width,780);
   }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('One damaged setting cannot erase saved fonts, position, translation and panel choices',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'lyrics-recovery-'));
+ try{await writeFile(join(dir,'settings.json'),JSON.stringify({font:'Outfit',width:-1,x:120,translationGlow:8,surface:'glass'}));const store=new SettingsStore(dir);await store.load();assert.equal(store.value.font,'Outfit');assert.equal(store.value.width,680);assert.equal(store.value.x,120);assert.equal(store.value.translationGlow,8);assert.equal(store.value.surface,'glass');}
+ finally{await rm(dir,{recursive:true,force:true});}
 });
 test('Imports override cache, cache avoids network and negative results are cached',async()=>{
   const dir=await mkdtemp(join(tmpdir(),'lyrics-cache-'));let calls=0;

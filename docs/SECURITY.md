@@ -4,13 +4,13 @@ The companion binds IPv4 **127.0.0.1:43827** only. WebSocket `/v1` upgrades requ
 
 ## Authentication and installation
 
-The explicit Connect/Repair action generates a random 256-bit **local companion credential**, persists only its SHA-256 digest in the companion profile and provisions the token into the user's installed Spicetify extension. This private local copy is generated at installation time; repository/download bundles contain only a placeholder and no machine-specific credential. The extension stores its credential in Spotify local storage and authenticates automatically. It is never a Spotify account/access token. Reinstalling reprovisions it and closes old sessions.
+The explicit Connect/Repair action generates a random 256-bit **local companion credential**, persists only its SHA-256 digest in the companion profile and provisions the token into the user's installed Spicetify extension. This private local copy is generated at installation time; repository/download bundles contain only a placeholder and no machine-specific credential. The extension stores its credential in Spotify local storage and authenticates automatically. It is never a Spotify account/access token. Reinstalling reprovisions it; the previous active connection is retained until the replacement authenticates.
 
 Manual pairing remains available: cryptographically generated 8-digit code, five-minute expiry, single use and throttled failed attempts. No Spotify credentials are requested. Pairing values never appear in diagnostic state snapshots or application logs. An unpaired extension waits for explicit setup instead of repeatedly consuming authentication attempts.
 
 Origin validation supplements authentication. Other local processes can spoof Origin, and a malicious extension inside the same Spotify/user account can read the installed local client. A compromised local account or administrator is outside this threat model. Do not publish installed extension copies, `secrets.json`, Spotify local storage or personal profile/cache files.
 
-Authentication must finish in eight seconds. Messages are schema validated, text-only, at most 16 KiB and rate limited to 40/second per socket. At most four sockets connect simultaneously. Ping/pong runs every ten seconds. Sequence numbers reject older snapshots, and new authenticated Spotify sessions replace previous ones. Async provider and translation results also require the active request generation.
+Authentication must finish in fifteen seconds. Messages are schema validated, text-only, at most 16 KiB and rate limited to 40/second per socket. At most four sockets connect simultaneously. Ping/pong runs every fifteen seconds; connections are terminated after more than three missed replies. Sequence numbers reject older snapshots, and new authenticated Spotify sessions replace previous ones. Async provider and translation results also require the active request generation.
 
 ## Renderer isolation
 

@@ -66,9 +66,10 @@ function boot() {
       if (socket!==ws) return;
       ready=false;
       if (event.code===4001) {
-        openingCode=undefined;token='';Spicetify.LocalStorage.set(storageKey,'');
-        // An unpaired extension waits for an explicit code instead of consuming pairing attempts.
-        return;
+        openingCode=undefined;
+        // Keep the persisted credential on a transient/reprovisioned session. A new injected
+        // extension may arrive after apply; never erase its shared localStorage token here.
+        clearTimeout(reconnect);reconnect=setTimeout(connect,31000);return;
       }
       if (event.code===4000) {stopped=true;return;}
       clearTimeout(reconnect);
